@@ -14,7 +14,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 60
     env:
-      TAG: v0.3.4-ventura.1
+      TAG: v0.3.4-ventura.2
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -38,7 +38,7 @@ jobs:
           MACVIEWER_SIGNING_IDENTITY: "-"
           MACVIEWER_UNIVERSAL: "1"
           MACVIEWER_VERSION: "0.3.4"
-          MACVIEWER_BUILD_NUMBER: "6"
+          MACVIEWER_BUILD_NUMBER: "7"
         run: |
           set -o pipefail
           chmod +x scripts/package_app.sh scripts/make_dmg.sh
