@@ -41,9 +41,9 @@ final class MacHostingModel: ObservableObject {
 
     // MARK: - Unattended access
 
-    static let unattendedAccessKey = "MacViewer.unattendedAccess"
-    static let unattendedControlKey = "MacViewer.unattendedControl"
-    static let preventSleepKey = "MacViewer.preventSleepWhileHosting"
+    nonisolated static let unattendedAccessKey = "MacViewer.unattendedAccess"
+    nonisolated static let unattendedControlKey = "MacViewer.unattendedControl"
+    nonisolated static let preventSleepKey = "MacViewer.preventSleepWhileHosting"
 
     /// A request reaches this model only after the host session verified the
     /// viewer's proof of this Mac's password (see `UltraViewerHostSession`),
