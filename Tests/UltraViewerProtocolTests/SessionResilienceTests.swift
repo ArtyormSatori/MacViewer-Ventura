@@ -89,7 +89,7 @@ import Testing
     #expect(!SessionReconnectPolicy.isEligibleForReconnect(
         Failure.partnerBlocked, hostEndedSession: false, wasAccepted: true))
     #expect(!SessionReconnectPolicy.isEligibleForReconnect(
-        Failure.lookupRejected(code: 5), hostEndedSession: false, wasAccepted: true))
+        Failure.lookupRejected(5), hostEndedSession: false, wasAccepted: true))
     #expect(!SessionReconnectPolicy.isEligibleForReconnect(
         Failure.invalidPartner, hostEndedSession: false, wasAccepted: true))
     #expect(!SessionReconnectPolicy.isEligibleForReconnect(
