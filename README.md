@@ -51,7 +51,7 @@ Mọi file đều nằm tại trang [Releases](https://github.com/ArtyormSatori/
 - **Chạy trên macOS 13 Ventura** (deployment target 13.0) — Intel và Apple Silicon; kèm bản dựng Linux.
 - **Chứng thư relay nhúng sẵn:** chứng thư gốc Sectigo R46 được nhúng làm trust anchor bổ sung, nên máy Ventura kết nối relay ngay mà không cần nạp chứng thư thủ công; neo hệ thống và cơ chế ghim tên chứng thư giữ nguyên.
 - **Điều khiển bật mặc định** khi kết nối (máy host vẫn là bên quyết định quyền).
-- **Chất lượng hình:** ngay khi kết nối, app tự đặt mức **Ưu tiên chất lượng (70)** — hình ảnh ưu tiên độ nét, bạn không cần chỉnh tay.
+- **Chất lượng hình:** app yêu cầu máy Windows gửi hình về theo một mức nét, có ba mức sẵn: **Ưu tiên tốc độ (30)** — mượt trên mạng yếu nhưng hình mờ hơn; **Tự động (45)**; **Ưu tiên chất lượng (70)** — hình nét nhất, tốn băng thông hơn. Ngay khi kết nối, app tự chọn mức Ưu tiên chất lượng (70) để hình nét ngay; bạn đổi mức bất cứ lúc nào trong Cài đặt.
 - **Tự cập nhật trong app:** bản tải về được đối chiếu SHA-256 với bảng tổng công bố, cài đè tại chỗ và tự mở lại; bản cài qua app không còn cảnh báo Gatekeeper (từ bản 3.0).
 - **Truy cập không người trực** (mặc định tắt): tự duyệt sau khi bằng chứng mật khẩu khớp; tuỳ chọn mở cùng lúc đăng nhập và chống ngủ khi chia sẻ.
 - **Bàn phím:** keycode US, VNI passthrough, văn bản Unicode (Cài đặt → Bàn phím).
@@ -164,7 +164,7 @@ All files are on the [Releases](https://github.com/ArtyormSatori/MacViewer-Ventu
 - **Runs on macOS 13 Ventura** (deployment target 13.0) — Intel and Apple Silicon; a Linux build is included.
 - **Relay certificate bundled:** the Sectigo R46 root is embedded as an additional trust anchor, so Ventura machines connect to the relay with no manual certificate step; system anchors and certificate-name pinning are unchanged.
 - **Control on by default** at connect (the host machine still decides permission).
-- **Image quality:** the moment a session connects, the app automatically sets the **Prefer quality (70)** level — the picture favours sharpness, with no manual adjustment needed.
+- **Image quality:** the app asks the Windows machine to send its picture at a sharpness level, with three ready levels: **Prefer speed (30)** — smooth on weak networks but blurrier; **Automatic (45)**; **Prefer quality (70)** — the sharpest picture, using more bandwidth. The moment a session connects, the app picks Prefer quality (70) so the picture is sharp right away; you can change the level any time in Settings.
 - **In-app updates:** the download is matched against the published SHA-256 checksums, installed in place and relaunched; no Gatekeeper prompt for app-installed updates (from 3.0).
 - **Unattended access** (off by default): auto-approves once the password proof matches; optional launch at login and sleep prevention while sharing.
 - **Keyboard:** US keycode, VNI passthrough, Unicode text (Settings → Keyboard).
