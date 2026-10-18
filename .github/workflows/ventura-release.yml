@@ -38,7 +38,7 @@ jobs:
           MACVIEWER_SIGNING_IDENTITY: "-"
           MACVIEWER_UNIVERSAL: "1"
           MACVIEWER_VERSION: "0.3.4"
-          MACVIEWER_BUILD_NUMBER: "7"
+          MACVIEWER_BUILD_NUMBER: "8"
         run: |
           set -o pipefail
           chmod +x scripts/package_app.sh scripts/make_dmg.sh
