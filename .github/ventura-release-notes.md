@@ -1,6 +1,6 @@
 ## MacViewer Ventura — phiên bản 4.0
 
-Từ bản này, bản fork mang tên **MacViewer Ventura** và dùng dãy số phiên bản riêng **4.0, 4.1, …** cho dễ nhớ — mỗi lần cập nhật là một phiên bản mới rõ ràng. (Ba bản đầu phát hành dưới tên ventura.1, ventura.2, ventura.3; nền kỹ thuật vẫn là MacViewer 0.3.4 của DeanOpen, chạy trên macOS 13 Ventura, Intel + Apple Silicon.)
+Bản fork của MacViewer 0.3.4 (DeanOpen) cho macOS 13 Ventura trở lên, Intel + Apple Silicon.
 
 **Có gì mới trong bản này**
 - Tên hiển thị của app đổi thành **MacViewer Ventura** (trong Finder, Launchpad, Dock và menu).

@@ -10,7 +10,7 @@
 
 ### [Tải bản mới nhất cho macOS Ventura](https://github.com/ArtyormSatori/MacViewer-Ventura/releases/latest)
 
-Chạy trên **macOS 13 Ventura** (cả máy Intel và Apple Silicon)
+Chạy trên **macOS 13 Ventura trở lên** (cả máy Intel và Apple Silicon)
 
 [![Release](https://img.shields.io/github/v/release/ArtyormSatori/MacViewer-Ventura)](https://github.com/ArtyormSatori/MacViewer-Ventura/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -43,8 +43,7 @@ Dự án gốc: [github.com/DeanOpen/MacViewer](https://github.com/DeanOpen/MacV
 
 ## Bản fork MacViewer Ventura thêm gì, sửa gì
 
-- **Tên và số phiên bản riêng, dễ nhớ**: app mang tên **MacViewer Ventura** và dùng dãy phiên bản riêng **4.0, 4.1, …** — mỗi lần cập nhật là một số phiên bản mới rõ ràng. (Ba bản đầu từng phát hành dưới tên ventura.1/.2/.3; nền kỹ thuật bên dưới vẫn là MacViewer 0.3.4 của DeanOpen.)
-- **Chạy được trên macOS 13 Ventura** (bản gốc đòi macOS 14).
+- **Chạy được trên macOS 13 Ventura trở lên** (bản gốc đòi macOS 14).
 - **Không cần nạp chứng thư vào Keychain nữa**: chứng thư gốc Sectigo R46 mà máy chủ UltraViewer dùng (kho tin cậy của Ventura chưa có) đã được nhúng sẵn trong app — cài là kết nối được ngay.
 - **Điều khiển bật sẵn**: kết nối tới máy Windows là điều khiển được ngay, không phải bật tay công tắc Điều khiển nữa (máy kia vẫn là bên quyết định cho phép hay không).
 - **Chất lượng hình mặc định "Ưu tiên chất lượng"** và tự áp dụng ngay khi kết nối.
