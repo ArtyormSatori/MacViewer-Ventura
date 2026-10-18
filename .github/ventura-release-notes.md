@@ -10,6 +10,8 @@ Fork của MacViewer của DeanOpen, cho macOS 13 Ventura trở lên, Intel + Ap
 
 **Cài thủ công lần đầu:** xem HUONG_DAN_CAI_DAT.md (bỏ qua mục 2 nếu không dùng bản 1.0).
 
+Nếu macOS báo "nhà phát triển chưa xác định" khi mở lần đầu sau khi cài thủ công, chạy lệnh này trong Terminal (một lần duy nhất): `xattr -dr com.apple.quarantine /Applications/MacViewer.app` — hoặc mở app bằng chuột phải → Open.
+
 CI: toàn bộ test chạy trước khi đóng gói. Đối chiếu bản tải về bằng SHA256SUMS-Ventura.txt.
 
 ---
@@ -25,5 +27,7 @@ Fork of MacViewer by DeanOpen, for macOS 13 Ventura and later, Intel + Apple Sil
 - Three field-reported fixes: the Command key now acts as Ctrl on the Windows side (⌘C/⌘V copy and paste work; switchable in Settings → Keyboard); text copied on the Mac pastes on Windows across UltraViewer versions; sessions ride out transient network drops instead of disconnecting on a single lost keepalive.
 
 **First manual install:** see HUONG_DAN_CAI_DAT.md (skip section 2 unless you use release 1.0).
+
+If macOS shows the "unidentified developer" warning on the first launch after a manual install, run this once in Terminal: `xattr -dr com.apple.quarantine /Applications/MacViewer.app` — or open the app with right-click → Open.
 
 CI: the full test suite runs before packaging. Verify downloads with SHA256SUMS-Ventura.txt.
