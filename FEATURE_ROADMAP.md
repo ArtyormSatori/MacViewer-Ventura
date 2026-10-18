@@ -1,8 +1,8 @@
-# Lộ trình tính năng · Feature roadmap
+# Feature roadmap · Lộ trình tính năng bổ sung (repo owner's request · yêu cầu của chủ repo, 2026-10-18)
 
 Nguyên tắc trung thực kỹ thuật: MacViewer nói chuyện bằng **giao thức UltraViewer** qua máy chủ trung gian của UltraViewer. Tính năng nào phụ thuộc cả hai đầu dây thì chỉ làm được trọn vẹn khi đầu kia cũng là MacViewer (Mac↔Mac); đầu kia là UltraViewer trên Windows thì bị trần của chính giao thức UltraViewer. Từng mục dưới đây ghi rõ trần đó.
 
-## Giai đoạn A — phía client, làm được ngay
+## Giai đoạn A — phía client, làm được ngay trên nền bản Ventura
 
 1. **Truy cập không cần người ngồi máy (unattended)** — ✅ ĐÃ LÀM (nhánh stage-a)
    Làm rõ cơ chế: phía host vốn đã tự xác minh bằng chứng mật khẩu của người kết nối (thử thách nonce trong `UltraViewerHostSession`) TRƯỚC khi hiện yêu cầu lên màn hình — nút Duyệt chỉ là lớp đồng ý thứ hai. Vì vậy trên giao thức legacy không có mật khẩu thứ hai riêng; unattended = tự duyệt sau khi bằng chứng mật khẩu đã khớp. Đã bổ sung: công tắc trong Cài đặt (bật/tắt, cho điều khiển hay chỉ xem), tự khởi động chia sẻ khi mở app nếu đang bật, Login Item (SMAppService, macOS 13+), và ngăn máy ngủ khi đang chia sẻ. Thiếu quyền (Quay màn hình/Tiếp cận) thì yêu cầu vẫn nằm chờ duyệt tay như cũ. Có unit test cho logic quyết định.
@@ -17,8 +17,8 @@ Nguyên tắc trung thực kỹ thuật: MacViewer nói chuyện bằng **giao t
 
 ## Giai đoạn B — hai đầu MacViewer
 
-4. **Gửi file (Mac↔Mac)**
-   Giao thức hiện không có lệnh truyền file (chỉ có chat lệnh 12/29/30 và clipboard). Bổ sung kênh file riêng giữa hai MacViewer: chia khối, kiểm tra toàn vẹn, gửi/nhận có thanh tiến độ trong cửa sổ Session Tools. Với đầu Windows UltraViewer: KHÔNG làm được từ phía client này vì UltraViewer không công bố lệnh truyền file tương thích.
+4. **Truyền file — có ở bản 5.0, chỉ khi cả hai máy cùng chạy MacViewer Ventura**
+   Nói rõ: truyền file là tính năng của bản 5.0 và chỉ hoạt động khi cả hai đầu đều chạy MacViewer Ventura (kênh file riêng giữa hai app: chia khối, kiểm tra toàn vẹn, gửi/nhận có thanh tiến độ). Nếu một bên dùng UltraViewer thì vẫn KHÔNG truyền file được — giao thức UltraViewer không có lệnh truyền file (chỉ có chat lệnh 12/29/30 và clipboard), và UltraViewer không công bố lệnh truyền file tương thích nào để app này dùng ké.
 
 ## Giai đoạn C — cần máy chủ riêng, phải chốt phương án trước
 
@@ -64,8 +64,8 @@ Technical-honesty principle: MacViewer speaks the **UltraViewer protocol** throu
 
 ## Stage B — both ends MacViewer
 
-4. **File sending (Mac↔Mac)**
-   The protocol currently has no file-transfer command (only chat commands 12/29/30 and clipboard). Add a separate file channel between two MacViewer instances: chunked, integrity-checked, send/receive with a progress bar in the Session Tools window. With a Windows UltraViewer peer: NOT possible from this client, because UltraViewer publishes no compatible file-transfer command.
+4. **File transfer — coming in 5.0, only when both machines run MacViewer Ventura**
+   Stated plainly: file transfer is a 5.0 feature and works only when both ends run MacViewer Ventura (a separate file channel between the two apps: chunked, integrity-checked, send/receive with a progress bar). If one side uses UltraViewer, file transfer still does NOT work — the UltraViewer protocol has no file-transfer command (only chat commands 12/29/30 and clipboard), and UltraViewer publishes no compatible file-transfer command this app could use.
 
 ## Stage C — needs its own server, decide the approach first
 
@@ -89,3 +89,35 @@ Levers for Stage A2 (Mac↔Mac gains the most):
 5. Viewer: coalesce to the newest frame — RE-EVALUATED: the viewer's event stream already has a bounded buffer at the relay layer (bufferingOldest(8)); the adapter layer consumes each frame in a few microseconds (just assigns the displayed frame). The risk of frame pile-up causing latency is low and transient; left untouched to avoid breaking a pipeline that works. Smooth scaling is already on by default.
 
 The honest ceiling: RustDesk uses its own protocol with hardware H.264/VP9 video over UDP. When the other end is UltraViewer Windows, the quality ceiling belongs to the UltraViewer protocol itself (TCP relay, rectangle updates, 16-bit) — no client can exceed it. This pack raises quality to that ceiling, and well beyond it for Mac↔Mac sessions where we control both ends.
+
+---
+
+## Phụ lục 2026-10-18 (chiều tối): MỞ LẠI mục 5 của gói chất lượng — hàng đợi khung phía viewer, cho bản ventura.3
+
+Bối cảnh: chiều dùng thật của chủ repo là **Mac điều khiển máy Windows** (chốt 14:00 18/10), kèm phản hồi "lag, đôi khi stuck". Nhịp chụp thích ứng (mục 1 gói chất lượng) chỉ giúp khi Mac là máy *bị xem* — KHÔNG giúp chiều này. Soi lại đường khung phía viewer theo đúng chiều Mac→Windows:
+
+- `NativeUltraViewerAdapter.swift:40` tạo `AsyncThrowingStream<RemoteSessionEvent, Error>.makeStream()` **không có bufferingPolicy** → đệm không giới hạn. Đây là stream DUY NHẤT trong codebase không đặt chính sách đệm: tầng relay `.bufferingOldest(8)` (UltraViewerRelaySession.swift:190), FramedTCPTransport `.bufferingOldest(64)`, TCPDirectPeerTransport `.bufferingOldest(8)`, UltraViewerHostSession `.bufferingOldest(128)`, RemoteInputBuffer `.bufferingNewest(1)`.
+- Backpressure của giao thức chỉ tính tới khâu giải mã (ACK "18" gửi ngay sau `renderer.apply`), không tính tới hiển thị; `makeCGImage()` nằm trong vòng tiêu thụ của adapter (dòng 69). Nếu hiển thị chậm hơn giải mã, khung đầy đủ (~cả MB ở 1080p BGRA) xếp hàng không giới hạn → độ trễ TÍCH LŨY trong phiên, khớp triệu chứng "càng dùng càng lag/stuck".
+- Đánh giá cũ ở mục 5 ("adapter tiêu thụ trong vài micro-giây, nguy cơ thấp") dựa trên giả định khâu gán khung là khâu cuối; đánh giá này chưa tính chi phí makeCGImage + vẽ lại UI và việc mất cơ chế bỏ khung ở đúng cầu nối relay→UI. Nay MỞ LẠI với bằng chứng trên.
+
+Việc làm cho ventura.3 (ưu tiên cao nhất cho chiều Mac→Windows, KHÔNG tốn chất lượng):
+1. Đặt `.bufferingNewest(1)` (hoặc `.bufferingOldest(1)`) cho stream ở adapter — luôn hiển thị khung mới nhất, bỏ khung trung gian. An toàn vì bitmap của ModernScreenRenderer là khung tích lũy: khung sau chứa mọi thay đổi của khung trước.
+2. Cân nhắc chuyển `makeCGImage()` ra khỏi MainActor.
+3. Áp dụng tương tự cho bản Linux (macviewer-linux mang đúng dòng 40 chưa có bufferingPolicy, vì fork từ nguồn ventura.2).
+
+Chưa chắc, ghi thẳng: chưa có số đo trên máy thật cho phiên Mac→Windows (ms giải mã/khung, RTT relay, phiên đi LAN-direct hay qua relay). Nếu vá xong mà lag không đổi, bước tiếp theo là lộ `UltraViewerRelaySession.Diagnostics` (decodedFrames, decodeNanoseconds, screenPayloadBytes, peerRoundTripMilliseconds) ra UI/log để đo, và kiểm tra trạng thái phiên có phải "Connected directly over the local network." hay không.
+
+## Addendum 2026-10-18 (evening): quality-pack item 5 REOPENED — viewer frame queue, for ventura.3
+
+Context: the owner's real direction is **Mac controlling a Windows host** (settled 14:00 18/10), with "lag, sometimes stuck" feedback. Adaptive capture pacing (quality-pack item 1) only helps when the Mac is the *viewed* host — it does NOT help this direction. Re-auditing the viewer frame path for Mac→Windows:
+
+- `NativeUltraViewerAdapter.swift:40` creates its `AsyncThrowingStream` with **no bufferingPolicy** → unbounded buffering. It is the ONLY stream in the codebase without one (relay `.bufferingOldest(8)`, FramedTCPTransport `.bufferingOldest(64)`, TCPDirectPeerTransport `.bufferingOldest(8)`, UltraViewerHostSession `.bufferingOldest(128)`, RemoteInputBuffer `.bufferingNewest(1)`).
+- Protocol backpressure ends at decode (ACK "18" right after `renderer.apply`), not at display; `makeCGImage()` sits in the adapter's consume loop (line 69). If display is slower than decode, full frames (~MB each at 1080p BGRA) queue without bound → latency ACCUMULATES over the session, matching "the longer it runs, the laggier / stuck".
+- Item 5's earlier assessment ("adapter consumes in microseconds, risk low") assumed frame assignment is the last step; it did not account for makeCGImage + UI redraw cost, nor for the frame-drop mechanism being lost exactly at the relay→UI bridge. REOPENED on the evidence above.
+
+ventura.3 work (top priority for Mac→Windows, zero quality cost):
+1. Set `.bufferingNewest(1)` (or `.bufferingOldest(1)`) on the adapter stream — always display the newest frame, drop intermediates. Safe because ModernScreenRenderer's bitmap is cumulative: each later frame contains every earlier change.
+2. Consider moving `makeCGImage()` off the MainActor.
+3. Apply the same to the Linux build (macviewer-linux carries the identical policy-less line 40, forked from the ventura.2 source).
+
+Stated honestly: no on-device measurements yet for a Mac→Windows session (decode ms/frame, relay RTT, LAN-direct vs relay). If the fix does not change the lag, the next step is exposing `UltraViewerRelaySession.Diagnostics` (decodedFrames, decodeNanoseconds, screenPayloadBytes, peerRoundTripMilliseconds) to UI/log and checking whether the session reports "Connected directly over the local network."
