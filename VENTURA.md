@@ -39,8 +39,10 @@ Các API còn lại đều tương thích Ventura (đã kiểm chứng):
   Chiều chính — **điều khiển máy Windows chạy UltraViewer từ máy Mac** —
   không dùng đường chụp này, hoạt động đầy đủ.
 - Bản build ký **ad-hoc** (giống bản gốc khi không có chứng chỉ Developer
-  ID): lần đầu mở cần nhấp chuột phải vào app → **Open**, hoặc chạy
-  `xattr -dr com.apple.quarantine /Applications/MacViewer.app`.
+  ID): khi cài thủ công, lần đầu mở cần nhấp chuột phải vào app → **Open**,
+  hoặc chạy `xattr -dr com.apple.quarantine /Applications/MacViewer.app`.
+  Từ ventura.3, các bản cập nhật do app tự cài (có đối chiếu SHA-256) sẽ
+  không còn gặp bước này.
 - File nhị phân `Sources/UltraViewerProtocol/Resources/8bit.dat` (112 KB,
   từ điển Zstandard của giao thức, giấy phép theo repo gốc) không lưu trong
   repo này; các workflow tự tải nó từ repo gốc tại đúng commit trên và kiểm
@@ -63,7 +65,7 @@ open dist/MacViewer.app
 
 Trên GitHub, workflow **Ventura Build & Release** tự chạy mỗi lần push lên
 `main`: test → đóng gói universal → đăng DMG/ZIP vào release
-`v0.3.4-ventura.1`, đồng thời lưu log build ở release `ci-logs`.
+ventura mới nhất (`v0.3.4-ventura.N`), đồng thời lưu log build ở release `ci-logs`.
 
 ## Giấy phép
 

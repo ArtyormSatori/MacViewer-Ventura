@@ -1,12 +1,12 @@
-## MacViewer 0.3.4 for macOS Ventura — v0.3.4-ventura.3
+## MacViewer 0.3.4 cho macOS Ventura — v0.3.4-ventura.3
 
-Update + compatibility build for macOS 13 Ventura (Intel + Apple Silicon).
+Bản cập nhật + tương thích cho macOS 13 Ventura (Intel + Apple Silicon).
 
-**New in this build**
-- Self-update fixed for this fork: when a newer Ventura release exists, the app now detects it, downloads it, verifies the DMG against the published SHA-256 checksums, installs it in place and relaunches — no "unidentified developer" prompt for updates installed this way. (Installing ventura.3 itself still needs the one-time right-click → Open; every update after that is prompt-free.)
-- Viewer defaults for controlling a Windows UltraViewer host: remote control is ON as soon as the session connects, and the "Prefer quality" picture preset (70) is applied automatically on connect.
-- Everything from ventura.2: bundled Sectigo R46 root (no Keychain import needed), unattended access, VNI/Unicode keyboard modes, Bayer dithering, adaptive host capture pacing.
+**Có gì mới trong bản này**
+- Đã sửa cơ chế tự cập nhật cho bản fork: khi có bản Ventura mới hơn, app nay tự nhận ra, tải về, đối chiếu file DMG với mã SHA-256 đã công bố, cài đè tại chỗ và tự mở lại — các bản cập nhật cài theo cách này sẽ không còn gặp cảnh báo "nhà phát triển chưa xác định". (Riêng việc cài ventura.3 lần này vẫn cần mở tay một lần bằng chuột phải → Open; mọi bản cập nhật sau đó đều tự động trơn tru.)
+- Mặc định cho chiều điều khiển máy Windows chạy UltraViewer: điều khiển bật sẵn ngay khi phiên kết nối, và mức chất lượng hình "Ưu tiên chất lượng" (70) được áp dụng tự động khi kết nối.
+- Toàn bộ nội dung của ventura.2: chứng thư gốc Sectigo R46 nhúng sẵn (không cần nạp Keychain), truy cập không cần người ngồi máy, chế độ gõ VNI/Unicode, dithering Bayer, nhịp chụp màn hình thích ứng phía máy chủ.
 
-**Install:** see HUONG_DAN_CAI_DAT.md in this repo; for this build you can skip section 2 (certificate import).
+**Cài đặt:** xem HUONG_DAN_CAI_DAT.md trong repo này; với bản này bạn bỏ qua được mục 2 (nạp chứng thư).
 
-Verified by CI: the full test suite runs before packaging. Use SHA256SUMS-Ventura.txt to verify downloads.
+Đã kiểm chứng bằng CI: toàn bộ test chạy trước khi đóng gói. Dùng SHA256SUMS-Ventura.txt để đối chiếu bản tải về.
