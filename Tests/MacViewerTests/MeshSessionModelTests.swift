@@ -138,43 +138,45 @@ private final class FakeMeshServer: MeshServerAPI, @unchecked Sendable {
     var rejectedPeers: [MeshID] = []
 
     func register(identity: MeshIdentity, name: String, invite: String) async throws -> MeshID {
-        lock.lock(); defer { lock.unlock() }
-        registerCalls += 1
-        lastInvite = invite
-        lastName = name
-        if let registerError { throw registerError }
-        return Self.assignedID
+        try lock.withLock {
+            registerCalls += 1
+            lastInvite = invite
+            lastName = name
+            if let registerError { throw registerError }
+            return Self.assignedID
+        }
     }
 
     func requestPairing(identity: MeshIdentity, meshID: MeshID, peer: MeshID) async throws -> PairingRequestResult {
-        lock.lock(); defer { lock.unlock() }
-        pairRequestCalls += 1
-        lastPairPeer = peer
-        if pairResult == .alreadyPaired && !paired.contains(peer) { paired.append(peer) }
-        return pairResult
+        lock.withLock {
+            pairRequestCalls += 1
+            lastPairPeer = peer
+            if pairResult == .alreadyPaired && !paired.contains(peer) { paired.append(peer) }
+            return pairResult
+        }
     }
 
     func listPendingPairings(identity: MeshIdentity, meshID: MeshID) async throws -> [MeshID] {
-        lock.lock(); defer { lock.unlock() }
-        return pending
+        lock.withLock { pending }
     }
 
     func approvePairing(identity: MeshIdentity, meshID: MeshID, peer: MeshID) async throws {
-        lock.lock(); defer { lock.unlock() }
-        approvedPeers.append(peer)
-        pending.removeAll { $0 == peer }
-        if !paired.contains(peer) { paired.append(peer) }
+        lock.withLock {
+            approvedPeers.append(peer)
+            pending.removeAll { $0 == peer }
+            if !paired.contains(peer) { paired.append(peer) }
+        }
     }
 
     func rejectPairing(identity: MeshIdentity, meshID: MeshID, peer: MeshID) async throws {
-        lock.lock(); defer { lock.unlock() }
-        rejectedPeers.append(peer)
-        pending.removeAll { $0 == peer }
+        lock.withLock {
+            rejectedPeers.append(peer)
+            pending.removeAll { $0 == peer }
+        }
     }
 
     func listPairedDevices() async -> [MeshID] {
-        lock.lock(); defer { lock.unlock() }
-        return paired
+        lock.withLock { paired }
     }
 
     func presence(of meshID: MeshID) async throws -> Presence {
