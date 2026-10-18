@@ -14,6 +14,8 @@
 
 **Tiếng Việt** · [English](README.en.md)
 
+<img src="docs/images/main-window-vi.png" width="820" alt="Giao diện chính của MacViewer Ventura">
+
 </div>
 
 ## Tổng quan
