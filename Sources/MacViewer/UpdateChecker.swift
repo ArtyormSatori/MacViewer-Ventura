@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 import Foundation
 import Security
 
@@ -11,6 +12,7 @@ final class UpdateChecker: ObservableObject {
         let version: String
         let pageURL: URL
         let dmgURL: URL?
+        let sumsURL: URL?
         var notes = ""
     }
 
@@ -34,13 +36,18 @@ final class UpdateChecker: ObservableObject {
     @Published private(set) var installError: String?
 
     let currentVersion: String
+    /// This build's Ventura release number (0 for plain upstream builds);
+    /// CFBundleShortVersionString alone cannot order Ventura releases.
+    let currentVenturaRelease: Int
     private let defaults: UserDefaults
     private var task: Task<Void, Never>?
     private var automaticTask: Task<Void, Never>?
 
     init(currentVersion: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0",
+         currentVenturaRelease: Int = (Bundle.main.object(forInfoDictionaryKey: "MacViewerVenturaRelease") as? NSNumber)?.intValue ?? 0,
          defaults: UserDefaults = .standard) {
         self.currentVersion = currentVersion
+        self.currentVenturaRelease = currentVenturaRelease
         self.defaults = defaults
         defaults.register(defaults: [Self.automaticKey: true])
     }
@@ -80,7 +87,8 @@ final class UpdateChecker: ObservableObject {
                 guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
                 let release = try Self.parseRelease(data)
                 defaults.set(Date(), forKey: Self.lastCheckKey)
-                state = Self.isVersion(release.version, newerThan: currentVersion) ? .available(release) : .upToDate
+                let identity = currentVenturaRelease > 0 ? "\(currentVersion)-ventura.\(currentVenturaRelease)" : currentVersion
+                state = Self.isVersion(release.version, newerThan: identity) ? .available(release) : .upToDate
             } catch {
                 state = .failed(L("Couldn’t check for updates. Check your internet connection and try again."))
             }
@@ -115,9 +123,17 @@ final class UpdateChecker: ObservableObject {
                     NSWorkspace.shared.open(dmg)
                     return
                 }
+                // The DMG must match the release's published checksums before
+                // anything is replaced; for ad-hoc builds this verification
+                // is the installer's trust anchor (there is no team signature).
+                var hashVerified = false
+                if let sumsURL = release.sumsURL {
+                    hashVerified = try await Self.verifyChecksum(of: dmg, sumsURL: sumsURL)
+                    guard hashVerified else { throw URLError(.cannotParseResponse) }
+                }
                 state = .installing(release)
                 defer { try? FileManager.default.removeItem(at: dmg) }
-                try await installer.install(from: dmg)
+                try await installer.install(from: dmg, hashVerified: hashVerified)
                 try installer.relaunchAfterExit()
                 // AppKit refuses to quit while the update sheet is attached, so
                 // close it first. Quit from the run loop, not from inside this
@@ -147,8 +163,12 @@ final class UpdateChecker: ObservableObject {
         guard payload.draft != true, payload.prerelease != true else { throw URLError(.cannotParseResponse) }
         let version = payload.tag_name.hasPrefix("v") ? String(payload.tag_name.dropFirst()) : payload.tag_name
         let dmg = payload.assets.first { $0.name.hasPrefix("MacViewer-") && $0.name.hasSuffix(".dmg") }
-        guard dmg.map({ $0.browser_download_url.host == "github.com" }) ?? true else { throw URLError(.cannotParseResponse) }
+        let sums = payload.assets.first { $0.name.hasPrefix("SHA256SUMS") && $0.name.hasSuffix(".txt") }
+        guard dmg.map({ $0.browser_download_url.host == "github.com" }) ?? true,
+              sums.map({ $0.browser_download_url.host == "github.com" }) ?? true
+        else { throw URLError(.cannotParseResponse) }
         return Release(version: version, pageURL: payload.html_url, dmgURL: dmg?.browser_download_url,
+                       sumsURL: sums?.browser_download_url,
                        notes: releaseNotes(payload.body ?? ""))
     }
 
@@ -163,7 +183,10 @@ final class UpdateChecker: ObservableObject {
         return kept.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Numeric comparison of dotted versions ("0.10.0" > "0.9.1"); suffixes after "-" are ignored.
+    /// Numeric comparison of dotted versions ("0.10.0" > "0.9.1"). When the
+    /// dotted parts tie, a "-ventura.N" suffix breaks the tie: a Ventura
+    /// build of the same upstream version is newer than the plain build and
+    /// than earlier Ventura builds. Other suffixes count as 0.
     nonisolated static func isVersion(_ candidate: String, newerThan current: String) -> Bool {
         func parts(_ version: String) -> [Int] {
             version.split(separator: "-").first.map { $0.split(separator: ".").map { Int($0) ?? 0 } } ?? []
@@ -173,7 +196,48 @@ final class UpdateChecker: ObservableObject {
             let a = index < lhs.count ? lhs[index] : 0, b = index < rhs.count ? rhs[index] : 0
             if a != b { return a > b }
         }
-        return false
+        return venturaNumber(of: candidate) > venturaNumber(of: current)
+    }
+
+    /// The N in a "-ventura.N" release suffix, or 0 when the suffix is absent.
+    nonisolated static func venturaNumber(of version: String) -> Int {
+        guard let marker = version.range(of: "-ventura.", options: [.caseInsensitive]) else { return 0 }
+        return Int(version[marker.upperBound...].prefix { $0.isNumber }) ?? 0
+    }
+
+    /// Downloads the release's SHA256SUMS file and checks the DMG against it.
+    nonisolated private static func verifyChecksum(of file: URL, sumsURL: URL) async throws -> Bool {
+        let (data, response) = try await URLSession.shared.data(from: sumsURL)
+        guard (response as? HTTPURLResponse)?.statusCode == 200,
+              let text = String(data: data, encoding: .utf8),
+              let expected = expectedHash(in: text, forFile: file.lastPathComponent)
+        else { return false }
+        return try sha256Hex(ofFile: file) == expected
+    }
+
+    /// Finds a file's hash in `sha256sum` output ("<hex>  <name>" per line,
+    /// the name optionally prefixed with "*" for binary mode).
+    nonisolated static func expectedHash(in sums: String, forFile name: String) -> String? {
+        for line in sums.split(separator: "\n") {
+            let fields = line.split(whereSeparator: { $0 == " " || $0 == "\t" })
+            guard fields.count >= 2, let fileField = fields.last else { continue }
+            let fileName = fileField.hasPrefix("*") ? String(fileField.dropFirst()) : String(fileField)
+            guard fileName == name else { continue }
+            let hash = fields[0].lowercased()
+            guard hash.count == 64, hash.allSatisfy({ $0.isHexDigit }) else { return nil }
+            return hash
+        }
+        return nil
+    }
+
+    nonisolated static func sha256Hex(ofFile file: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: file)
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while let chunk = try handle.read(upToCount: 1 << 20), !chunk.isEmpty {
+            hasher.update(data: chunk)
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     nonisolated private static func downloadDMG(from url: URL, into folder: URL,
@@ -213,26 +277,28 @@ final class UpdateChecker: ObservableObject {
 }
 
 /// Replaces the running MacViewer.app with the copy inside a downloaded DMG.
-/// The new app must be signed by the same Apple team as the running one.
+/// Team-signed builds require the new app to carry the same Apple team
+/// signature. Ad-hoc builds (the Ventura fork) have no team to check; they
+/// install only when the DMG matched the release's published SHA-256 checksums
+/// and the staged copy is a consistently signed ad-hoc build of the same app.
 struct SelfInstaller: Sendable {
     enum Failure: Error { case mountFailed, appMissing, signatureRejected, notSameApp }
 
     let appURL: URL
-    let teamIdentifier: String
+    let teamIdentifier: String?
 
-    /// Nil when this copy can't update itself: unsigned/ad-hoc builds, apps run
-    /// from a disk image or App Translocation, or a folder the user can't write.
+    /// Nil when this copy can't update itself: apps run from a disk image or
+    /// App Translocation, or a folder the user can't write.
     init?(appURL: URL) {
         guard appURL.pathExtension == "app", !appURL.path.contains("/AppTranslocation/"),
               FileManager.default.isWritableFile(atPath: appURL.deletingLastPathComponent().path),
-              let values = try? appURL.resourceValues(forKeys: [.volumeIsReadOnlyKey]), values.volumeIsReadOnly != true,
-              let team = Self.teamIdentifier(of: appURL)
+              let values = try? appURL.resourceValues(forKeys: [.volumeIsReadOnlyKey]), values.volumeIsReadOnly != true
         else { return nil }
         self.appURL = appURL
-        self.teamIdentifier = team
+        self.teamIdentifier = Self.teamIdentifier(of: appURL)
     }
 
-    func install(from dmg: URL) async throws {
+    func install(from dmg: URL, hashVerified: Bool) async throws {
         let mountPoint = FileManager.default.temporaryDirectory.appendingPathComponent("MacViewer-update-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: mountPoint, withIntermediateDirectories: true)
         guard try await Self.run("/usr/bin/hdiutil", ["attach", dmg.path, "-nobrowse", "-noautoopen", "-readonly",
@@ -252,13 +318,31 @@ struct SelfInstaller: Sendable {
         // Copy next to the current app (same volume), verify that copy, then swap.
         let staged = appURL.deletingLastPathComponent().appendingPathComponent(".MacViewer-update-\(UUID().uuidString).app")
         try FileManager.default.copyItem(at: newApp, to: staged)
+        // The staged copy was produced by this already-trusted process from a
+        // verified download; it must not carry a quarantine marker into the
+        // swap, or the relaunched app would hit the Gatekeeper prompt.
+        Quarantine.strip(from: staged)
         do {
-            guard Self.isValid(staged, team: teamIdentifier) else { throw Failure.signatureRejected }
+            if let teamIdentifier {
+                guard Self.isValid(staged, team: teamIdentifier) else { throw Failure.signatureRejected }
+            } else {
+                guard hashVerified, Self.isConsistentlySignedAdHoc(staged) else { throw Failure.signatureRejected }
+            }
             _ = try FileManager.default.replaceItemAt(appURL, withItemAt: staged)
         } catch {
             try? FileManager.default.removeItem(at: staged)
             throw error
         }
+    }
+
+    /// An ad-hoc signature that is internally consistent across all
+    /// architectures and nested code, and carries no team identifier.
+    static func isConsistentlySignedAdHoc(_ url: URL) -> Bool {
+        guard teamIdentifier(of: url) == nil else { return false }
+        var code: SecStaticCode?
+        guard SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess, let code else { return false }
+        let flags = SecCSFlags(rawValue: kSecCSCheckAllArchitectures | kSecCSCheckNestedCode)
+        return SecStaticCodeCheckValidity(code, flags, nil) == errSecSuccess
     }
 
     /// Opens the (replaced) app once this process has exited.

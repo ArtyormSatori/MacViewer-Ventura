@@ -29,6 +29,7 @@ fi
 # CI sets these; local builds keep the current development values.
 app_version="${MACVIEWER_VERSION:-0.3.4}"
 build_number="${MACVIEWER_BUILD_NUMBER:-5}"
+ventura_release="${MACVIEWER_VENTURA_RELEASE:-0}"
 build_flags=(--configuration "$configuration")
 if [[ "${MACVIEWER_UNIVERSAL:-0}" == "1" ]]; then
   build_flags+=(--arch arm64 --arch x86_64)
@@ -72,6 +73,7 @@ cat > "$app_directory/Contents/Info.plist" <<PLIST
   <key>CFBundleLocalizations</key><array><string>en</string><string>vi</string></array>
   <key>CFBundleShortVersionString</key><string>$app_version</string>
   <key>CFBundleVersion</key><string>$build_number</string>
+  <key>MacViewerVenturaRelease</key><integer>$ventura_release</integer>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>

@@ -38,6 +38,10 @@ security dump-trust-settings -d | grep -i -A2 sectigo
 
 Làm xong, thoát hẳn MacViewer (Cmd+Q) rồi mở lại.
 
+## Cập nhật các bản sau (từ ventura.3)
+
+Từ bản **ventura.3** trở đi, app tự kiểm tra và cài bản mới ngay trong app (tải về, đối chiếu mã SHA-256 với bảng tổng đã công bố, thay thế tại chỗ và tự mở lại) — các lần cập nhật sau sẽ **không** còn gặp cảnh báo "nhà phát triển chưa xác định". Riêng việc cài ventura.3 lần này vẫn cần mở tay một lần (chuột phải → Mở) như các bản trước.
+
 ## 3. Cấp quyền (chỉ khi máy này làm máy chủ — bị điều khiển)
 
 Vào **System Settings → Privacy & Security** và bật MacViewer ở hai mục:
