@@ -1,43 +1,58 @@
 <div align="center">
 
-<img src="docs/images/app-icon.png" width="128" alt="MacViewer Ventura app icon · Biểu tượng MacViewer Ventura">
+<img src="docs/images/app-icon.png" width="128" alt="Biểu tượng MacViewer Ventura · MacViewer Ventura app icon">
 
 # MacViewer Ventura
 
-**An UltraViewer client for macOS: control a Windows machine from your Mac, and vice versa.**
-**Client UltraViewer cho macOS: điều khiển máy Windows từ máy Mac, và ngược lại.**
+**Client UltraViewer cho macOS và Linux: điều khiển máy Windows từ xa, và ngược lại.**
+<br>
+An UltraViewer client for macOS and Linux: control a Windows machine remotely, and vice versa.
 
-[Download the latest release · Tải bản mới nhất](https://github.com/ArtyormSatori/MacViewer-Ventura/releases/latest) · macOS 13 Ventura+ · Intel + Apple Silicon
+[Tải bản mới nhất · Download the latest release](https://github.com/ArtyormSatori/MacViewer-Ventura/releases/latest)
 
 [![Release](https://img.shields.io/github/v/release/ArtyormSatori/MacViewer-Ventura)](https://github.com/ArtyormSatori/MacViewer-Ventura/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Swift](https://img.shields.io/badge/Swift-6-orange)
 
-Tài liệu hai phần · Documentation in two parts: [Tiếng Việt](#tổng-quan) · [English](#english)
-
-<img src="docs/images/main-window-vi.png" width="820" alt="MacViewer Ventura main window">
-<br><sub>Main window (Vietnamese UI) · Giao diện chính (bản tiếng Việt)</sub>
+[Tiếng Việt](#tiếng-việt) · [English](#english)
 
 </div>
 
-## Tổng quan
+---
 
-MacViewer Ventura là client macOS mã nguồn mở cho UltraViewer — phần mềm điều khiển máy tính từ xa chỉ có bản Windows. MacViewer Ventura chạy trên **macOS 13 Ventura trở lên** (Intel và Apple Silicon). Ngoài bản Mac, dự án còn có **bản dựng cho Linux** đính kèm tại các release, với cùng khả năng kết nối. Không phải sản phẩm chính thức của UltraViewer; chỉ kết nối tới máy bạn được phép truy cập.
+## Tiếng Việt
 
-## App làm gì
+### Tổng quan
+
+UltraViewer chỉ có bản Windows. MacViewer Ventura là client mã nguồn mở để kết nối tới các máy đó từ **macOS 13 Ventura trở lên** và từ **Linux**: nhập ID + mật khẩu của máy đích là xem màn hình và điều khiển được ngay; máy của bạn cũng có thể làm máy được điều khiển, sau khi bạn duyệt.
+
+Đây không phải sản phẩm chính thức của UltraViewer. Chỉ kết nối tới máy bạn được phép truy cập.
+
+Trạng thái: dự án đang được phát triển tích cực. Lộ trình và các giới hạn đã đo: [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md).
+
+### Tải về
+
+Mọi file đều nằm tại trang [Releases](https://github.com/ArtyormSatori/MacViewer-Ventura/releases/latest).
+
+| Nền tảng | File | Kiểm chứng |
+|---|---|---|
+| macOS 13+ (Intel + Apple Silicon) | `MacViewer-Ventura-<phiên bản>-macOS.dmg` (khuyên dùng) hoặc `MacViewer-Ventura-<phiên bản>-macOS.zip` | Đối chiếu với `SHA256SUMS-macOS.txt` trong cùng release |
+| Linux (x86-64) | `MacViewer-Ventura-<phiên bản>-Linux.tar.gz` hoặc `MacViewer-Ventura-<phiên bản>-Linux-amd64.deb` | File `.sha256` đi kèm từng file |
+
+### App làm gì
 
 - **Viewer:** nhập ID + mật khẩu của máy đang chạy UltraViewer/MacViewer → xem màn hình, điều khiển chuột và bàn phím.
-- **Host:** cho máy khác kết nối vào máy Mac, sau khi chủ máy duyệt (quyền xem và quyền điều khiển cấp riêng).
+- **Host:** cho máy khác kết nối vào máy của bạn, sau khi bạn duyệt (quyền xem và quyền điều khiển cấp riêng).
 - **Đường truyền:** TLS qua relay của UltraViewer; hai máy cùng LAN thì kết nối trực tiếp.
 - **Phụ trợ:** chat, clipboard văn bản hai chiều, chụp màn hình + ghi chú, quay video phiên, nghe âm thanh của máy kia, lưu mật khẩu đối tác vào Keychain.
 
-## Điểm nổi bật
+### Điểm nổi bật
 
-- **Chạy trên macOS 13 Ventura** (deployment target 13.0) — Intel và Apple Silicon.
+- **Chạy trên macOS 13 Ventura** (deployment target 13.0) — Intel và Apple Silicon; kèm bản dựng Linux.
 - **Chứng thư relay nhúng sẵn:** chứng thư gốc Sectigo R46 được nhúng làm trust anchor bổ sung, nên máy Ventura kết nối relay ngay mà không cần nạp chứng thư thủ công; neo hệ thống và cơ chế ghim tên chứng thư giữ nguyên.
 - **Điều khiển bật mặc định** khi kết nối (máy host vẫn là bên quyết định quyền).
 - **Chất lượng hình Ưu tiên chất lượng (70)** tự áp dụng khi kết nối.
-- **Tự cập nhật trong app:** đối chiếu SHA-256 với bảng tổng công bố, cài đè tại chỗ và tự mở lại; không còn cảnh báo Gatekeeper đối với bản cài qua app (từ 3.0).
+- **Tự cập nhật trong app:** bản tải về được đối chiếu SHA-256 với bảng tổng công bố, cài đè tại chỗ và tự mở lại; bản cài qua app không còn cảnh báo Gatekeeper (từ bản 3.0).
 - **Truy cập không người trực** (mặc định tắt): tự duyệt sau khi bằng chứng mật khẩu khớp; tuỳ chọn mở cùng lúc đăng nhập và chống ngủ khi chia sẻ.
 - **Bàn phím:** keycode US, VNI passthrough, văn bản Unicode (Cài đặt → Bàn phím).
 - **Hình phía host:** dithering Bayer 4×4; nhịp chụp thích ứng 50–1000 ms.
@@ -45,14 +60,30 @@ MacViewer Ventura là client macOS mã nguồn mở cho UltraViewer — phần m
 
 Chi tiết kỹ thuật: [VENTURA.md](VENTURA.md).
 
-## Giới hạn
+### Ảnh màn hình
 
-- Không truyền file: giao thức UltraViewer không có lệnh truyền file (đang làm cho trường hợp Mac↔Mac, xem [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md)).
-- Màu hình giới hạn ở RGB555 + atlas JPEG theo giao thức; không có video H.264/UDP kiểu RustDesk.
-- Máy Ventura làm host: ảnh chụp không kèm con trỏ chuột (giới hạn API cũ).
-- App ký ad-hoc: lần cài đầu tiên mở bằng chuột phải → Open; cập nhật trong app thì không cần.
+<div align="center">
 
-## Cài đặt
+<img src="docs/images/main-window-vi.png" width="820" alt="Cửa sổ chính MacViewer Ventura (giao diện tiếng Việt)">
+<br><sub>Cửa sổ chính — giao diện tiếng Việt</sub>
+
+<br>
+
+<img src="docs/images/main-window.png" width="820" alt="Cửa sổ chính MacViewer Ventura (giao diện tiếng Anh)">
+<br><sub>Cửa sổ chính — giao diện tiếng Anh</sub>
+
+</div>
+
+### Yêu cầu hệ thống
+
+| | Yêu cầu |
+|---|---|
+| macOS | 13 Ventura trở lên, chip Intel hoặc Apple Silicon |
+| Linux | x86-64, bản `.tar.gz` hoặc gói `.deb` |
+| Quyền trên máy host (macOS) | **Ghi màn hình** và **Trợ năng**, cấp khi app yêu cầu |
+| Mạng | Truy cập được relay của UltraViewer, hoặc hai máy cùng LAN |
+
+### Cài đặt (macOS)
 
 1. Tải `MacViewer-Ventura-<phiên bản>.dmg` (hoặc `.zip`) ở [Releases](https://github.com/ArtyormSatori/MacViewer-Ventura/releases/latest).
 2. Kéo `MacViewer.app` vào thư mục **Applications**.
@@ -61,31 +92,40 @@ Chi tiết kỹ thuật: [VENTURA.md](VENTURA.md).
 
 Chi tiết từng bước: [readme.txt](readme.txt).
 
-## Cập nhật
+### Cập nhật
 
 App tự kiểm tra bản mới tại repo này. Khi có bản mới, bấm **Cập nhật và khởi động lại**: app tải về, kiểm SHA-256, cài đè và tự mở lại.
 
-## Báo lỗi & giúp kiểm thử
+### Giới hạn
+
+- Không truyền file: giao thức UltraViewer không có lệnh truyền file (đang làm cho trường hợp Mac↔Mac, xem [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md)).
+- Màu hình giới hạn ở RGB555 + atlas JPEG theo giao thức; không có video H.264/UDP kiểu RustDesk.
+- Máy Ventura làm host: ảnh chụp không kèm con trỏ chuột (giới hạn API cũ).
+- App ký ad-hoc: lần cài đầu tiên mở bằng chuột phải → Open; cập nhật trong app thì không cần.
+
+### Báo lỗi & giúp kiểm thử
 
 Gặp lỗi? Mở [issue](https://github.com/ArtyormSatori/MacViewer-Ventura/issues/new/choose) theo mẫu có sẵn — cho biết phiên bản, triệu chứng, và kết nối bao lâu thì gặp. Muốn giúp kiểm thử bài bản hơn (thử để yên, thử phiên dài, thử nối lại): xem [BAO_LOI_VA_KIEM_THU.md](BAO_LOI_VA_KIEM_THU.md).
 
-## Tài liệu
+### Tài liệu
 
-- [readme.txt](readme.txt) — cài đặt, cấp quyền, sử dụng
-- [BAO_LOI_VA_KIEM_THU.md](BAO_LOI_VA_KIEM_THU.md) — cách kiểm thử và báo lỗi
-- [VENTURA.md](VENTURA.md) — chi tiết kỹ thuật
-- [SECURITY_AUDIT.md](SECURITY_AUDIT.md) — rà soát bảo mật
-- [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md) — lộ trình tính năng, giới hạn đã đo
+| File | Nội dung |
+|---|---|
+| [readme.txt](readme.txt) | Cài đặt, cấp quyền, sử dụng |
+| [BAO_LOI_VA_KIEM_THU.md](BAO_LOI_VA_KIEM_THU.md) | Cách kiểm thử và báo lỗi |
+| [VENTURA.md](VENTURA.md) | Chi tiết kỹ thuật |
+| [SECURITY_AUDIT.md](SECURITY_AUDIT.md) | Rà soát bảo mật |
+| [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md) | Lộ trình tính năng, giới hạn đã đo |
 
-## Build từ mã nguồn
+### Build từ mã nguồn
 
 Máy build cần macOS 14.5+ và Xcode 16 (app build ra chạy trên macOS 13+). GitHub Actions chạy toàn bộ test và đóng gói bản universal mỗi lần push lên `main`. Xem [VENTURA.md](VENTURA.md).
 
-## Quyền riêng tư
+### Quyền riêng tư
 
 Không thu thập dữ liệu. Kiểm tra cập nhật chỉ đọc thông tin công khai trên GitHub (tắt được trong Cài đặt). Mật khẩu chỉ lưu vào Keychain khi người dùng chọn; lịch sử kết nối chỉ lưu ID.
 
-## Giấy phép
+### Giấy phép
 
 Dựa trên dự án mã nguồn mở MacViewer của DeanOpen.
 
@@ -95,20 +135,33 @@ Giấy phép MIT — xem [LICENSE](LICENSE). Thư viện bên thứ ba giữ gi�
 
 ## English
 
-## Overview
+### Overview
 
-MacViewer Ventura is an open-source macOS client for UltraViewer — remote-control software that ships for Windows only. MacViewer Ventura runs on **macOS 13 Ventura and later** (Intel and Apple Silicon). The project also ships a **Linux build**, attached to the releases, with the same connection capabilities. Not an official UltraViewer product; connect only to machines you are permitted to access.
+UltraViewer ships for Windows only. MacViewer Ventura is an open-source client that connects to those machines from **macOS 13 Ventura and later** and from **Linux**: enter the target machine's ID + password to view and control it right away; your machine can also be the one being controlled, after you approve.
 
-## What the app does
+Not an official UltraViewer product. Connect only to machines you are permitted to access.
+
+Status: the project is under active development. Roadmap and measured limits: [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md).
+
+### Download
+
+All files are on the [Releases](https://github.com/ArtyormSatori/MacViewer-Ventura/releases/latest) page.
+
+| Platform | File | Verification |
+|---|---|---|
+| macOS 13+ (Intel + Apple Silicon) | `MacViewer-Ventura-<version>-macOS.dmg` (recommended) or `MacViewer-Ventura-<version>-macOS.zip` | Check against `SHA256SUMS-macOS.txt` in the same release |
+| Linux (x86-64) | `MacViewer-Ventura-<version>-Linux.tar.gz` or `MacViewer-Ventura-<version>-Linux-amd64.deb` | Per-file `.sha256` sidecar |
+
+### What the app does
 
 - **Viewer:** enter the ID + password of a machine running UltraViewer/MacViewer → view its screen, control mouse and keyboard.
-- **Host:** let another machine connect to this Mac after the owner approves (view and control permissions granted separately).
+- **Host:** let another machine connect to yours after you approve (view and control permissions granted separately).
 - **Transport:** TLS via UltraViewer's relay; machines on the same LAN connect directly.
 - **Extras:** chat, two-way text clipboard, screenshot + annotation, session video recording, remote audio playback, partner passwords stored in Keychain.
 
-## Highlights
+### Highlights
 
-- **Runs on macOS 13 Ventura** (deployment target 13.0) — Intel and Apple Silicon.
+- **Runs on macOS 13 Ventura** (deployment target 13.0) — Intel and Apple Silicon; a Linux build is included.
 - **Relay certificate bundled:** the Sectigo R46 root is embedded as an additional trust anchor, so Ventura machines connect to the relay with no manual certificate step; system anchors and certificate-name pinning are unchanged.
 - **Control on by default** at connect (the host machine still decides permission).
 - **Prefer-quality image (70)** applied automatically at connect.
@@ -120,14 +173,30 @@ MacViewer Ventura is an open-source macOS client for UltraViewer — remote-cont
 
 Technical details: [VENTURA.md](VENTURA.md).
 
-## Limits
+### Screenshots
 
-- No file transfer: the UltraViewer protocol has no file-transfer command (in progress for the Mac↔Mac case, see [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md)).
-- Image color limited to RGB555 + JPEG atlas per the protocol; no RustDesk-style H.264/UDP video.
-- Ventura as host: captured frames do not include the mouse cursor (legacy API limitation).
-- Ad-hoc signed: first manual install opens via right-click → Open; in-app updates do not need this.
+<div align="center">
 
-## Install
+<img src="docs/images/main-window.png" width="820" alt="MacViewer Ventura main window (English UI)">
+<br><sub>Main window — English UI</sub>
+
+<br>
+
+<img src="docs/images/main-window-vi.png" width="820" alt="MacViewer Ventura main window (Vietnamese UI)">
+<br><sub>Main window — Vietnamese UI</sub>
+
+</div>
+
+### System requirements
+
+| | Requirement |
+|---|---|
+| macOS | 13 Ventura or later, Intel or Apple Silicon chip |
+| Linux | x86-64, the `.tar.gz` build or the `.deb` package |
+| Permissions on a macOS host | **Screen Recording** and **Accessibility**, granted when the app asks |
+| Network | Reachable UltraViewer relay, or both machines on the same LAN |
+
+### Install (macOS)
 
 1. Download `MacViewer-Ventura-<version>.dmg` (or `.zip`) from [Releases](https://github.com/ArtyormSatori/MacViewer-Ventura/releases/latest).
 2. Drag `MacViewer.app` into **Applications**.
@@ -136,31 +205,40 @@ Technical details: [VENTURA.md](VENTURA.md).
 
 Step-by-step details: [readme.txt](readme.txt).
 
-## Updates
+### Updates
 
 The app checks this repo for new versions. When one is available, click **Update and Restart**: the app downloads it, verifies the SHA-256, installs in place and relaunches.
 
-## Reporting bugs & helping test
+### Limits
+
+- No file transfer: the UltraViewer protocol has no file-transfer command (in progress for the Mac↔Mac case, see [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md)).
+- Image color limited to RGB555 + JPEG atlas per the protocol; no RustDesk-style H.264/UDP video.
+- Ventura as host: captured frames do not include the mouse cursor (legacy API limitation).
+- Ad-hoc signed: first manual install opens via right-click → Open; in-app updates do not need this.
+
+### Reporting bugs & helping test
 
 Hit a problem? Open an [issue](https://github.com/ArtyormSatori/MacViewer-Ventura/issues/new/choose) using the ready-made template — state your version, the symptom, and how long you were connected before it happened. For structured testing (idle test, long-session test, reconnect test), see [BAO_LOI_VA_KIEM_THU.md](BAO_LOI_VA_KIEM_THU.md).
 
-## Documentation
+### Documentation
 
-- [readme.txt](readme.txt) — install, permissions, usage
-- [BAO_LOI_VA_KIEM_THU.md](BAO_LOI_VA_KIEM_THU.md) — how to test and report bugs
-- [VENTURA.md](VENTURA.md) — technical details
-- [SECURITY_AUDIT.md](SECURITY_AUDIT.md) — security audit
-- [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md) — feature roadmap, measured limits
+| File | Contents |
+|---|---|
+| [readme.txt](readme.txt) | Install, permissions, usage |
+| [BAO_LOI_VA_KIEM_THU.md](BAO_LOI_VA_KIEM_THU.md) | How to test and report bugs |
+| [VENTURA.md](VENTURA.md) | Technical details |
+| [SECURITY_AUDIT.md](SECURITY_AUDIT.md) | Security audit |
+| [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md) | Feature roadmap, measured limits |
 
-## Building from source
+### Building from source
 
 The build machine needs macOS 14.5+ and Xcode 16 (the built app runs on macOS 13+). GitHub Actions runs the full test suite and packages a universal build on every push to `main`. See [VENTURA.md](VENTURA.md).
 
-## Privacy
+### Privacy
 
 No data collection. Update checks only read public information on GitHub (can be disabled in Settings). Passwords are stored in Keychain only when the user opts in; connection history stores IDs only.
 
-## License
+### License
 
 Based on the open-source MacViewer project by DeanOpen.
 
