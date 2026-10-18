@@ -16,10 +16,10 @@ jobs:
     env:
       TAG: v0.3.4-ventura.1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Select Xcode
-        uses: maxim-lobanov/setup-xcode@v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
         with:
           xcode-version: latest-stable
 
@@ -41,6 +41,7 @@ jobs:
           MACVIEWER_BUILD_NUMBER: "6"
         run: |
           set -o pipefail
+          chmod +x scripts/package_app.sh scripts/make_dmg.sh
           scripts/package_app.sh release 2>&1 | tee -a "$GITHUB_WORKSPACE/build-log.txt"
           echo "--- LSMinimumSystemVersion ---" | tee -a "$GITHUB_WORKSPACE/build-log.txt"
           /usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" dist/MacViewer.app/Contents/Info.plist 2>&1 | tee -a "$GITHUB_WORKSPACE/build-log.txt"
