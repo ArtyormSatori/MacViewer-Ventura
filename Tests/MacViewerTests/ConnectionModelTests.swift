@@ -110,7 +110,7 @@ struct ConnectionModelTests {
         model.disconnect()
     }
 
-    @Test("Input requires peer capability and an explicit control toggle; failures release held input")
+    @Test("Input is on by default with peer capability; the toggle and failures still gate it")
     func remoteInputBoundaryAndFailure() async throws {
         let defaults = try isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: defaultsSuite(defaults)) }
@@ -126,9 +126,7 @@ struct ConnectionModelTests {
         try await settle { adapter.events.count == 1 }
         adapter.events[0].yield(.connected(RemoteSessionInfo(partnerID: "123456789", allowsRemoteInput: true)))
         try await settle { model.phase == .connected }
-        model.send(movement)
-        #expect(adapter.inputs.isEmpty)
-        model.setControlEnabled(true)
+        #expect(model.controlEnabled)
         model.send(movement)
         try await settle { adapter.inputs == [movement] }
         model.setControlEnabled(false)
@@ -167,7 +165,7 @@ struct ConnectionModelTests {
         model.disconnect()
     }
 
-    @Test("Permission suspension releases held input and recovery requires an explicit control toggle")
+    @Test("Permission suspension releases held input and recovery restores control by default")
     func permissionRecovery() async throws {
         let defaults = try isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: defaultsSuite(defaults)) }
@@ -193,9 +191,8 @@ struct ConnectionModelTests {
         #expect(!model.controlEnabled)
         adapter.events[0].yield(.inputPermissionChanged(true))
         try await settle { model.remoteInfo?.allowsRemoteInput == true }
-        #expect(!model.controlEnabled)
+        #expect(model.controlEnabled)
         try await settle { adapter.inputs == [down, .releaseAll, .releaseAll] }
-        model.setControlEnabled(true)
         model.send(.pointerMoved(x: 10, y: 10))
         try await settle { adapter.inputs.last == .pointerMoved(x: 10, y: 10) }
         model.disconnect()
@@ -224,11 +221,37 @@ struct ConnectionModelTests {
         adapter.suspendedInput?.resume(returning: ()); adapter.suspendedInput = nil
         try await settle { adapter.suspendedInputReturned && adapter.inputs.last == .releaseAll }
         #expect(adapter.inputs == [down, .releaseAll])
-        #expect(!model.controlEnabled)
+        #expect(model.controlEnabled)
         model.setControlEnabled(true)
         model.send(.pointerMoved(x: 7, y: 9))
         try await settle { adapter.inputs.last == .pointerMoved(x: 7, y: 9) }
         #expect(model.controlEnabled)
+        model.disconnect()
+    }
+
+    @Test("Control turned off by the user stays off when permission is re-granted")
+    func userDisabledControlSurvivesRegrant() async throws {
+        let defaults = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: defaultsSuite(defaults)) }
+        let adapter = ControlledAdapter()
+        let model = ConnectionModel(adapter: adapter, defaults: defaults,
+                                    credentials: ModelTestCredentials(), audioPlayer: ModelTestAudio())
+        model.partnerID = "123456789"
+        model.password = "password"
+        model.connect()
+        try await settle { adapter.events.count == 1 }
+        adapter.events[0].yield(.connected(RemoteSessionInfo(partnerID: "123456789", allowsRemoteInput: true)))
+        try await settle { model.phase == .connected }
+        #expect(model.controlEnabled)
+        model.setControlEnabled(false)
+        #expect(!model.controlEnabled)
+        adapter.events[0].yield(.inputPermissionChanged(false))
+        try await settle { model.remoteInfo?.allowsRemoteInput == false }
+        adapter.events[0].yield(.inputPermissionChanged(true))
+        try await settle { model.remoteInfo?.allowsRemoteInput == true }
+        #expect(!model.controlEnabled)
+        model.send(.pointerMoved(x: 1, y: 1))
+        #expect(adapter.inputs.last == .releaseAll)
         model.disconnect()
     }
 
@@ -415,6 +438,21 @@ struct ConnectionModelTests {
         #expect(adapter.commands.contains(where: { $0.payload == Data("32|||2".utf8) && !$0.formatFlag }))
         model.disconnect()
         #expect(model.frame == nil && model.displayedFrame == nil && model.remoteCursor == nil)
+    }
+
+    @Test("Connecting sends the saved image-quality preset, Prefer quality by default")
+    func connectAppliesImageQualityPreference() async throws {
+        let defaults = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: defaultsSuite(defaults)) }
+        let adapter = ControlledAdapter()
+        let model = ConnectionModel(adapter: adapter, defaults: defaults,
+                                    credentials: ModelTestCredentials(), audioPlayer: ModelTestAudio())
+        model.partnerID = "123456789"; model.password = "password"; model.connect()
+        try await settle { adapter.events.count == 1 }
+        adapter.events[0].yield(.connected(RemoteSessionInfo(partnerID: "123456789", allowsRemoteInput: true)))
+        try await settle { adapter.commands.contains(where: { $0.payload == Data("31|||70".utf8) }) }
+        #expect(adapter.commands.contains(where: { $0.payload == Data("32|||2".utf8) && !$0.formatFlag }))
+        model.disconnect()
     }
 
     @Test("A delayed audio enable cannot override a later disable, and PCM is gated by active playback")

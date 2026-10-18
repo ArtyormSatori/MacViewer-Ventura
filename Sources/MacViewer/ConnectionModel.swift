@@ -32,6 +32,7 @@ final class ConnectionModel: ObservableObject {
     }
 
     static let rememberPartnersKey = "MacViewer.rememberPartners"
+    static let imageQualityKey = "MacViewer.imageQuality"
     static let rememberPasswordKey = "MacViewer.rememberPassword"
     private static let recentPartnersKey = "MacViewer.recentPartners"
 
@@ -52,7 +53,12 @@ final class ConnectionModel: ObservableObject {
     @Published private(set) var displayedFrame: RemoteScreenFrame?
     @Published private(set) var selectedMonitor = 0
     @Published private(set) var recentPartners: [String]
-    @Published private(set) var controlEnabled = false
+    /// Control is the default posture for new sessions (the remote host
+    /// still decides with allowsRemoteInput, and an input error stops
+    /// control for the rest of the session). Only an explicit user toggle
+    /// off suppresses it, and only until the session ends.
+    @Published private(set) var controlEnabled = true
+    private var controlSuppressedByUser = false
     @Published private(set) var computerAudioEnabled = false
     @Published private(set) var isChangingAudio = false
     @Published private(set) var showRemoteCursor = true
@@ -85,7 +91,8 @@ final class ConnectionModel: ObservableObject {
         self.credentials = credentials ?? KeychainPartnerCredentialStore()
         self.audioPlayer = audioPlayer ?? RemoteAudioPlayer()
         self.inputBufferCapacity = inputBufferCapacity
-        defaults.register(defaults: [Self.rememberPartnersKey: true, Self.rememberPasswordKey: true])
+        defaults.register(defaults: [Self.rememberPartnersKey: true, Self.rememberPasswordKey: true,
+                                     Self.imageQualityKey: RemoteImageQuality.quality.rawValue])
         rememberPassword = defaults.bool(forKey: Self.rememberPasswordKey)
         recentPartners = defaults.bool(forKey: Self.rememberPartnersKey)
             ? Array((defaults.stringArray(forKey: Self.recentPartnersKey) ?? []).prefix(10))
@@ -224,6 +231,7 @@ final class ConnectionModel: ObservableObject {
             guard inputBuffer?.isFinished == false else { return }
         } else { enqueueInput(.releaseAll) }
         controlEnabled = enabled
+        controlSuppressedByUser = !enabled
     }
 
     func send(_ input: RemoteInput) {
@@ -265,6 +273,14 @@ final class ConnectionModel: ObservableObject {
         guard let quality = Int32(exactly: value) else { return }
         sendCommands([RemoteControlCommands.rgb555ColorMode, RemoteControlCommands.quality(quality)],
                      requiresControl: false)
+    }
+
+    /// Tells the host the saved image-quality preference (default: Prefer
+    /// image quality) as soon as a session connects, instead of leaving the
+    /// host at its own default until the user opens the session toolbar.
+    private func applyImageQualityPreference() {
+        let raw = defaults.string(forKey: Self.imageQualityKey) ?? RemoteImageQuality.quality.rawValue
+        if let quality = RemoteImageQuality(rawValue: raw) { setImageQuality(quality) }
     }
 
     func setShowRemoteCursor(_ enabled: Bool) {
@@ -420,6 +436,7 @@ final class ConnectionModel: ObservableObject {
         case let .connected(info):
             guard phase == .connecting else { return }
             remoteInfo = info
+            controlEnabled = info.allowsRemoteInput && !controlSuppressedByUser
             phase = .connected
             status = "Connected to \(info.displayName ?? info.partnerID)."
             rememberPartner(info.partnerID)
@@ -432,6 +449,7 @@ final class ConnectionModel: ObservableObject {
             }
             startInput()
             sendCommands([RemoteControlCommands.cursorPositions(enabled: showRemoteCursor)], requiresControl: false)
+            applyImageQualityPreference()
             let token = generation
             tools.activate(sendChat: { [weak self] text in
                 guard let self, generation == token, phase == .connected else { throw CancellationError() }
@@ -472,6 +490,7 @@ final class ConnectionModel: ObservableObject {
                 // discarded one behind a successfully completed held key.
                 startInput(releasingHeldInput: true)
                 errorMessage = nil
+                if !controlSuppressedByUser { controlEnabled = true }
             }
         case let .disconnected(reason):
             endSession(message: reason ?? "The remote computer disconnected.")
@@ -550,7 +569,7 @@ final class ConnectionModel: ObservableObject {
                         try Task.checkCancellation()
                         guard generation == activeGeneration, inputGeneration == activeInputGeneration,
                               phase == .connected else { return }
-                        if input != .releaseAll && !controlEnabled { continue }
+                        if input != .releaseAll && !(controlEnabled && remoteInfo?.allowsRemoteInput == true) { continue }
                         try await adapter.send(input)
                     }
                 }
@@ -594,7 +613,10 @@ final class ConnectionModel: ObservableObject {
 
     private func stopInput() {
         // Adapters must release remote held input as part of disconnect as well.
-        controlEnabled = false
+        // The next session starts from the default again: control on, and any
+        // user suppression from the previous session forgotten.
+        controlEnabled = true
+        controlSuppressedByUser = false
         inputGeneration = UUID()
         inputBuffer?.finish()
         inputBuffer = nil

@@ -10,7 +10,7 @@ struct ConnectionView: View {
     @ObservedObject var remoteCapture: RemoteCaptureController
     @ObservedObject var updater: UpdateChecker
     @State private var remoteDisplayScale: RemoteDisplayScale = .fit
-    @State private var remoteImageQuality: RemoteImageQuality = .automatic
+    @AppStorage("MacViewer.imageQuality") private var remoteImageQuality: RemoteImageQuality = .quality
     @State private var showSession = false
     @State private var showSessionToolbar = true
     @State private var remoteWallpaperVisible = true
