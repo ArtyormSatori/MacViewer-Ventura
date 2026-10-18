@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MacViewer Ventura — Điều khiển máy Windows từ máy Mac / Control a Windows PC from your Mac</title>
+<meta name="description" content="MacViewer Ventura: client UltraViewer cho macOS 13 Ventura trở lên — điều khiển máy Windows từ máy Mac, và ngược lại. Miễn phí, mã nguồn mở.">
+<style>
+  :root{
+    --navy:#0B1B31; --blue:#1B7FE0; --orange:#F28C28; --grey:#9AA6B2;
+    --ink:#12233c; --muted:#5a6b82; --bg:#f6f8fb; --card:#ffffff; --line:#e2e9f2;
+  }
+  *{box-sizing:border-box} html{scroll-behavior:smooth}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.6}
+  a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
+  .wrap{max-width:1020px;margin:0 auto;padding:0 20px}
+  header{position:sticky;top:0;background:rgba(246,248,251,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);z-index:10}
+  .nav{display:flex;align-items:center;gap:14px;padding:12px 0}
+  .nav img{width:34px;height:34px;border-radius:8px}
+  .nav .name{font-weight:700;font-size:17px}
+  .nav .spacer{flex:1}
+  .langbtn{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:5px 14px;font-size:13px;cursor:pointer;color:var(--ink)}
+  .langbtn.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .hero{background:linear-gradient(160deg,#0d2242,#0B1B31 55%,#081426);color:#eef4fb;text-align:center;padding:72px 0 60px}
+  .hero img.icon{width:132px;height:132px;border-radius:30px;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+  .hero h1{font-size:44px;margin:22px 0 6px;letter-spacing:-.5px}
+  .hero p.tag{font-size:19px;color:#c8d7ea;max-width:640px;margin:0 auto 8px}
+  .hero p.sub{color:#8fa5c0;font-size:15px;margin:0 0 28px}
+  .cta{display:inline-block;background:var(--orange);color:#fff;font-weight:700;font-size:17px;padding:14px 34px;border-radius:12px;box-shadow:0 10px 26px rgba(242,140,40,.35)}
+  .cta:hover{text-decoration:none;filter:brightness(1.06)}
+  .cta2{display:inline-block;margin-left:10px;border:1px solid #33507a;color:#dbe7f5;font-weight:600;font-size:15px;padding:13px 22px;border-radius:12px}
+  .cta2:hover{text-decoration:none;background:rgba(255,255,255,.06)}
+  section{padding:56px 0 8px}
+  h2{font-size:27px;margin:0 0 8px;letter-spacing:-.3px}
+  .lead{color:var(--muted);max-width:720px;margin:0 0 26px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
+  .card h3{margin:0 0 6px;font-size:16px}
+  .card p{margin:0;color:var(--muted);font-size:14.5px}
+  .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;counter-reset:step}
+  .step{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
+  .step .n{display:inline-flex;width:30px;height:30px;border-radius:50%;background:var(--navy);color:#fff;align-items:center;justify-content:center;font-weight:700;margin-bottom:10px}
+  .step p{margin:0;color:var(--muted);font-size:14.5px}
+  .shot{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;text-align:center}
+  .shot img{max-width:100%;border-radius:10px}
+  .shot .cap{color:var(--muted);font-size:13.5px;margin-top:8px}
+  .bugs{background:#fff7ec;border:1px solid #f3ddba;border-radius:16px;padding:26px}
+  .bugs h2{margin-top:0}
+  code{background:#eef2f8;border-radius:6px;padding:1px 6px;font-size:13.5px}
+  footer{border-top:1px solid var(--line);margin-top:56px;padding:26px 0 40px;color:var(--muted);font-size:14px}
+  [data-lang]{display:none}
+  html[data-ui="vi"] [data-lang="vi"]{display:block}
+  html[data-ui="en"] [data-lang="en"]{display:block}
+  span[data-lang]{display:none}
+  html[data-ui="vi"] span[data-lang="vi"]{display:inline}
+  html[data-ui="en"] span[data-lang="en"]{display:inline}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap nav">
+    <img src="images/app-icon.png" alt="MacViewer Ventura icon">
+    <span class="name">MacViewer Ventura</span>
+    <span class="spacer"></span>
+    <button class="langbtn active" id="btn-vi" onclick="setLang('vi')">Tiếng Việt</button>
+    <button class="langbtn" id="btn-en" onclick="setLang('en')">English</button>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="wrap">
+    <img class="icon" src="images/app-icon.png" alt="MacViewer Ventura">
+    <h1>MacViewer Ventura</h1>
+    <p class="tag">
+      <span data-lang="vi">Điều khiển máy Windows từ máy Mac của bạn — ngay trên macOS 13 Ventura.</span>
+      <span data-lang="en">Control a Windows machine from your Mac — right on macOS 13 Ventura.</span>
+    </p>
+    <p class="sub">
+      <span data-lang="vi">Client UltraViewer mã nguồn mở cho macOS · Intel + Apple Silicon · Miễn phí</span>
+      <span data-lang="en">Open-source UltraViewer client for macOS · Intel + Apple Silicon · Free</span>
+    </p>
+    <a class="cta" href="https://github.com/ArtyormSatori/MacViewer-Ventura/releases/latest">
+      <span data-lang="vi">Tải bản mới nhất</span><span data-lang="en">Download the latest release</span>
+    </a>
+    <a class="cta2" href="https://github.com/ArtyormSatori/MacViewer-Ventura">
+      <span data-lang="vi">Xem mã nguồn</span><span data-lang="en">View source</span>
+    </a>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <section>
+    <div data-lang="vi">
+      <h2>App làm gì</h2>
+      <p class="lead">UltraViewer vốn chỉ có bản Windows. MacViewer Ventura mang khả năng đó lên máy Mac: nhập ID và mật khẩu của máy đang chạy UltraViewer là bạn thấy màn hình và điều khiển được ngay — và ngược lại, máy khác cũng kết nối vào máy Mac của bạn được khi bạn cho phép.</p>
+    </div>
+    <div data-lang="en">
+      <h2>What it does</h2>
+      <p class="lead">UltraViewer ships for Windows only. MacViewer Ventura brings it to the Mac: enter the ID and password of a machine running UltraViewer and you can view and control it right away — and the other way round, others can connect to your Mac when you allow it.</p>
+    </div>
+    <div class="grid">
+      <div class="card"><h3>🖥️ <span data-lang="vi">Xem & điều khiển</span><span data-lang="en">View & control</span></h3>
+        <p><span data-lang="vi">Chuột, bàn phím, nhiều màn hình; chất lượng hình ưu tiên nét theo mặc định.</span><span data-lang="en">Mouse, keyboard, multiple monitors; prefer-quality image by default.</span></p></div>
+      <div class="card"><h3>🔒 <span data-lang="vi">An toàn theo thiết kế</span><span data-lang="en">Safe by design</span></h3>
+        <p><span data-lang="vi">TLS có ghim chứng thư, mật khẩu đối tác lưu trong Keychain, không thu thập dữ liệu.</span><span data-lang="en">Pinned-certificate TLS, partner passwords in Keychain, no data collection.</span></p></div>
+      <div class="card"><h3>💬 <span data-lang="vi">Chat & clipboard</span><span data-lang="en">Chat & clipboard</span></h3>
+        <p><span data-lang="vi">Trò chuyện và đồng bộ văn bản sao chép hai chiều trong phiên.</span><span data-lang="en">In-session chat and two-way text clipboard sync.</span></p></div>
+      <div class="card"><h3>🔄 <span data-lang="vi">Tự cập nhật trong app</span><span data-lang="en">In-app updates</span></h3>
+        <p><span data-lang="vi">Bản mới được đối chiếu SHA-256 rồi cài đè tại chỗ — không cảnh báo Gatekeeper với bản cài qua app.</span><span data-lang="en">New versions are SHA-256-verified and installed in place — no Gatekeeper prompt for in-app updates.</span></p></div>
+    </div>
+  </section>
+
+  <section>
+    <div data-lang="vi"><h2>Cài đặt trong 3 bước</h2><p class="lead">Lần cài đầu tiên cần mở app bằng chuột phải một lần; các lần cập nhật sau diễn ra ngay trong app.</p></div>
+    <div data-lang="en"><h2>Install in 3 steps</h2><p class="lead">The first install needs one right-click open; later updates happen inside the app.</p></div>
+    <div class="steps">
+      <div class="step"><span class="n">1</span><p><span data-lang="vi">Tải file <b>MacViewer-Ventura-…-macOS.dmg</b> ở trang Releases và kéo <b>MacViewer.app</b> vào thư mục Applications.</span><span data-lang="en">Download the <b>MacViewer-Ventura-…-macOS.dmg</b> from Releases and drag <b>MacViewer.app</b> into Applications.</span></p></div>
+      <div class="step"><span class="n">2</span><p><span data-lang="vi">Mở lần đầu: <b>chuột phải → Open → Open</b>. (Hoặc chạy lệnh <code>xattr -dr com.apple.quarantine /Applications/MacViewer.app</code>)</span><span data-lang="en">First launch: <b>right-click → Open → Open</b>. (Or run <code>xattr -dr com.apple.quarantine /Applications/MacViewer.app</code>)</span></p></div>
+      <div class="step"><span class="n">3</span><p><span data-lang="vi">Nhập ID + mật khẩu của máy đích và kết nối. Nếu để máy khác nối vào, cấp quyền Ghi màn hình và Trợ năng theo hướng dẫn trong app.</span><span data-lang="en">Enter the target machine's ID + password and connect. To let others connect to you, grant Screen Recording and Accessibility as the app prompts.</span></p></div>
+    </div>
+  </section>
+
+  <section>
+    <div data-lang="vi"><h2>Hình ảnh</h2></div>
+    <div data-lang="en"><h2>Screenshots</h2></div>
+    <div class="shot">
+      <img src="images/main-window-vi.png" alt="MacViewer Ventura main window">
+      <div class="cap"><span data-lang="vi">Cửa sổ chính — nhập ID đối tác để kết nối, hoặc chia sẻ ID của bạn.</span><span data-lang="en">Main window — enter a partner ID to connect, or share yours.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="bugs">
+      <div data-lang="vi">
+        <h2>Giúp săn lỗi, app sẽ tốt hơn</h2>
+        <p>Dự án nhỏ, không có đội kiểm thử riêng — báo cáo của bạn rất có giá trị. Gặp lỗi, hãy mở một <a href="https://github.com/ArtyormSatori/MacViewer-Ventura/issues/new/choose">issue theo mẫu có sẵn</a>: chỉ cần cho biết phiên bản, triệu chứng, và kết nối bao lâu thì gặp. Muốn thử bài bản hơn — phép thử để yên 20–30 phút, phép thử phiên dài, phép thử nối lại — xem <a href="https://github.com/ArtyormSatori/MacViewer-Ventura/blob/main/BAO_LOI_VA_KIEM_THU.md">hướng dẫn báo lỗi & kiểm thử</a>.</p>
+      </div>
+      <div data-lang="en">
+        <h2>Help hunt bugs</h2>
+        <p>This is a small project with no QA team — your reports matter. If something breaks, open an <a href="https://github.com/ArtyormSatori/MacViewer-Ventura/issues/new/choose">issue using the template</a>: just state your version, the symptom, and how long you were connected. For structured testing — the idle test, the long-session test, the reconnect test — see the <a href="https://github.com/ArtyormSatori/MacViewer-Ventura/blob/main/BAO_LOI_VA_KIEM_THU.md">reporting & testing guide</a>.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap" style="padding:0">
+      <span data-lang="vi">MacViewer Ventura · Giấy phép MIT · Không phải sản phẩm chính thức của UltraViewer — chỉ kết nối tới máy bạn được phép truy cập.</span>
+      <span data-lang="en">MacViewer Ventura · MIT License · Not an official UltraViewer product — connect only to machines you are permitted to access.</span>
+    </div>
+  </footer>
+</div>
+
+<script>
+  function setLang(l){
+    document.documentElement.setAttribute('data-ui', l);
+    document.documentElement.lang = l;
+    document.getElementById('btn-vi').classList.toggle('active', l==='vi');
+    document.getElementById('btn-en').classList.toggle('active', l==='en');
+    try{ localStorage.setItem('mv-lang', l); }catch(e){}
+  }
+  (function(){
+    var saved = null;
+    try{ saved = localStorage.getItem('mv-lang'); }catch(e){}
+    setLang(saved === 'en' ? 'en' : 'vi');
+  })();
+</script>
+</body>
+</html>
