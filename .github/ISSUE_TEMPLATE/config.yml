@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Hướng dẫn báo lỗi & kiểm thử / Bug-report & testing guide
+    url: https://github.com/ArtyormSatori/MacViewer-Ventura/blob/main/BAO_LOI_VA_KIEM_THU.md
+    about: Cách thử các tình huống hay gặp lỗi và báo sao cho sửa được nhanh / How to test the usual failure cases and report them usefully

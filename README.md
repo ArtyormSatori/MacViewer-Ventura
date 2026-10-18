@@ -65,9 +65,14 @@ Chi tiết từng bước: [readme.txt](readme.txt).
 
 App tự kiểm tra bản mới tại repo này. Khi có bản mới, bấm **Cập nhật và khởi động lại**: app tải về, kiểm SHA-256, cài đè và tự mở lại.
 
+## Báo lỗi & giúp kiểm thử
+
+Gặp lỗi? Mở [issue](https://github.com/ArtyormSatori/MacViewer-Ventura/issues/new/choose) theo mẫu có sẵn — cho biết phiên bản, triệu chứng, và kết nối bao lâu thì gặp. Muốn giúp kiểm thử bài bản hơn (thử để yên, thử phiên dài, thử nối lại): xem [BAO_LOI_VA_KIEM_THU.md](BAO_LOI_VA_KIEM_THU.md).
+
 ## Tài liệu
 
 - [readme.txt](readme.txt) — cài đặt, cấp quyền, sử dụng
+- [BAO_LOI_VA_KIEM_THU.md](BAO_LOI_VA_KIEM_THU.md) — cách kiểm thử và báo lỗi
 - [VENTURA.md](VENTURA.md) — chi tiết kỹ thuật
 - [SECURITY_AUDIT.md](SECURITY_AUDIT.md) — rà soát bảo mật
 - [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md) — lộ trình tính năng, giới hạn đã đo
@@ -135,9 +140,14 @@ Step-by-step details: [readme.txt](readme.txt).
 
 The app checks this repo for new versions. When one is available, click **Update and Restart**: the app downloads it, verifies the SHA-256, installs in place and relaunches.
 
+## Reporting bugs & helping test
+
+Hit a problem? Open an [issue](https://github.com/ArtyormSatori/MacViewer-Ventura/issues/new/choose) using the ready-made template — state your version, the symptom, and how long you were connected before it happened. For structured testing (idle test, long-session test, reconnect test), see [BAO_LOI_VA_KIEM_THU.md](BAO_LOI_VA_KIEM_THU.md).
+
 ## Documentation
 
 - [readme.txt](readme.txt) — install, permissions, usage
+- [BAO_LOI_VA_KIEM_THU.md](BAO_LOI_VA_KIEM_THU.md) — how to test and report bugs
 - [VENTURA.md](VENTURA.md) — technical details
 - [SECURITY_AUDIT.md](SECURITY_AUDIT.md) — security audit
 - [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md) — feature roadmap, measured limits

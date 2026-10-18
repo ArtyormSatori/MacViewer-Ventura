@@ -1,0 +1,17 @@
+name: Đề xuất tính năng / Feature request
+description: Đề xuất một tính năng hoặc cải tiến / Suggest a feature or improvement
+title: "[Đề xuất] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Bạn muốn app làm được gì? / What should the app do?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Tính năng này giúp gì cho bạn? / What problem does it solve for you?
+    validations:
+      required: false

@@ -1,0 +1,94 @@
+name: Báo lỗi / Bug report
+description: Báo một lỗi bạn gặp khi dùng MacViewer Ventura / Report a problem with MacViewer Ventura
+title: "[Lỗi] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Cảm ơn bạn đã giúp săn lỗi. Báo cáo càng đủ các mục dưới đây thì lỗi càng được sửa nhanh.
+        Thanks for helping hunt bugs — the more of these fields you fill in, the faster the fix.
+        **Đừng đăng mật khẩu hay ID đầy đủ của đối tác lên đây** (issue là công khai) — che bớt vài số nếu cần.
+        **Never post passwords or a partner's full ID here** (issues are public) — mask a few digits if needed.
+  - type: input
+    id: version
+    attributes:
+      label: Phiên bản app / App version
+      description: Xem ở mục Giới thiệu (About) trong app, ví dụ 4.0.1 / Shown in the app's About, e.g. 4.0.1
+      placeholder: "4.0.1"
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS và chip / macOS version and chip
+      description: Ví dụ "macOS 13.7, Apple Silicon M1" hoặc "macOS 13.7, Intel" / e.g. "macOS 13.7, Apple Silicon M1" or "macOS 13.7, Intel"
+      placeholder: "macOS 13.7, Intel"
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: Bạn đang ở vai nào? / Your role
+      options:
+        - Viewer — điều khiển máy Windows/máy khác / controlling another machine
+        - Host — máy Mac của bạn được điều khiển / your Mac is being controlled
+    validations:
+      required: true
+  - type: dropdown
+    id: symptom
+    attributes:
+      label: Triệu chứng chính / Main symptom
+      options:
+        - Tự ngắt kết nối / Disconnects by itself
+        - Lag, hình trễ dần theo thời gian / Lag builds up over time
+        - Chuột/bàn phím không có tác dụng / Mouse or keyboard has no effect
+        - Đơ hoặc crash app / App freezes or crashes
+        - Lỗi cài đặt hoặc cập nhật / Install or update problem
+        - Khác / Other
+    validations:
+      required: true
+  - type: input
+    id: duration
+    attributes:
+      label: Kết nối bao lâu thì gặp lỗi? / How long connected before it happens?
+      description: Ví dụ "khoảng 15 phút", "ngay từ đầu", "để yên 20 phút quay lại thì gặp" / e.g. "about 15 minutes", "from the start", "after 20 idle minutes"
+      placeholder: "khoảng 15 phút"
+    validations:
+      required: true
+  - type: dropdown
+    id: picture
+    attributes:
+      label: Lúc lỗi xảy ra, hình ảnh thế nào? / During the problem, the picture is…
+      options:
+        - Hình vẫn chạy bình thường / Still moving normally
+        - Hình vẫn chạy nhưng trễ hơn thực tế / Moving but behind real time
+        - Hình đứng im / Frozen
+        - Không rõ / Not sure
+    validations:
+      required: false
+  - type: dropdown
+    id: reconnect
+    attributes:
+      label: Ngắt ra kết nối lại thì sao? / After disconnecting and reconnecting…
+      options:
+        - Lag/chậm ngay từ đầu / Slow immediately
+        - Lúc đầu bình thường, sau lại lỗi / Fine at first, then it happens again
+        - Bình thường trở lại / Back to normal
+        - Chưa thử / Not tried
+    validations:
+      required: false
+  - type: textarea
+    id: steps
+    attributes:
+      label: Các bước gây ra lỗi và điều bạn thấy / Steps to reproduce and what you observed
+      description: Kể theo thứ tự bạn đã làm. Nếu đã thử tắt/bật lại quyền điều khiển (Control) khi chuột chết, cho biết có tác dụng không. / Describe in order. If input died and you tried toggling Control off/on, say whether it helped.
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Thêm (không bắt buộc) / Anything else (optional)
+      description: Thông báo lỗi nguyên văn trên màn hình, ảnh chụp, thời điểm xảy ra… / Exact on-screen message, screenshot, time it happened…
+    validations:
+      required: false
