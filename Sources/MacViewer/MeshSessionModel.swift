@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import MeshClient
 
@@ -61,6 +62,10 @@ final class MeshSessionModel: ObservableObject {
     /// The session-negotiation controller bound to the live signaling
     /// connection, if any. Rebuilt whenever signaling reconnects.
     @Published private(set) var sessionController: MeshSessionController?
+    /// The Mode 2 chat center bound to the same signaling
+    /// connection (Phase 3, chunk 3). Rebuilt with the controller.
+    @Published private(set) var chatCenter: MeshChatCenter?
+    private var chatForwardSink: AnyCancellable?
 
     private let identityStore: any MeshIdentityStore
     private let makeClient: (URL) -> any MeshServerAPI
@@ -165,10 +170,20 @@ final class MeshSessionModel: ObservableObject {
             devices.append(device)
         }
         pairedDevices = devices
+        if let chatCenter {
+            for device in devices {
+                chatCenter.updatePresence(peer: device.id,
+                                          online: device.online == true,
+                                          name: device.name)
+            }
+        }
     }
 
     /// Tears down presence. The identity and pairings persist.
     func stop() async {
+        chatCenter?.disconnect()
+        chatCenter = nil
+        chatForwardSink = nil
         sessionController?.stop()
         sessionController = nil
         await signaling?.close()
@@ -298,6 +313,9 @@ final class MeshSessionModel: ObservableObject {
             isOnline = true
             return
         }
+        chatCenter?.disconnect()
+        chatCenter = nil
+        chatForwardSink = nil
         sessionController?.stop()
         sessionController = nil
         await signaling?.close()
@@ -309,15 +327,35 @@ final class MeshSessionModel: ObservableObject {
             signaling = fresh
             isOnline = fresh.isConnected
             if fresh.isConnected {
-                // Negotiation rides the same connection: the
-                // controller consumes its signal stream from here on.
+                // Negotiation and chat ride the same connection: the
+                // controller consumes its signal stream from here on
+                // and fans chat traffic out to the chat center.
+                let isPaired: @MainActor (MeshID) -> Bool = { [weak self] peer in
+                    self?.pairedDevices.contains { $0.id == peer } ?? false
+                }
                 let controller = MeshSessionController(
                     signaling: fresh,
-                    isPaired: { [weak self] peer in
-                        self?.pairedDevices.contains { $0.id == peer } ?? false
-                    },
+                    isPaired: isPaired,
                     localName: { [weak self] in self?.deviceName ?? "Mac" })
+                let center = MeshChatCenter(
+                    signaling: fresh,
+                    isPaired: isPaired,
+                    localName: { [weak self] in self?.deviceName ?? "Mac" },
+                    historyDirectory: Self.supportDirectory
+                        .appendingPathComponent("chat", isDirectory: true))
+                controller.onUnhandledSignal = { [weak center] envelope in
+                    center?.handle(envelope)
+                }
+                controller.onServerError = { [weak center] error in
+                    center?.handleServerError(error)
+                }
                 sessionController = controller
+                chatCenter = center
+                // Views observe this model, not the center: forward
+                // its changes (unread badges, transcripts) upward.
+                chatForwardSink = center.objectWillChange.sink { [weak self] _ in
+                    Task { @MainActor [weak self] in self?.objectWillChange.send() }
+                }
                 controller.start()
             }
         } catch {

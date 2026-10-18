@@ -7,6 +7,9 @@ import SwiftUI
 /// Before an identity exists it shows the first-run surface (§6.1).
 struct MeshModeView: View {
     @ObservedObject var mesh: MeshSessionModel
+    /// Opens the shared chat window for a paired device (Phase 3,
+    /// chunk 3). Owned by ConnectionView, which owns the windows.
+    var onOpenChat: ((MeshSessionModel.PairedDevice) -> Void)?
     @State private var connectID = ""
     @State private var createName = ""
     @State private var inviteCode = ""
@@ -263,6 +266,25 @@ struct MeshModeView: View {
                                 Text(device.id.formatted)
                                     .font(.system(size: 12, design: .monospaced))
                                     .foregroundStyle(.secondary)
+                            }
+                            if let center = mesh.chatCenter {
+                                Button { onOpenChat?(device) } label: {
+                                    ZStack(alignment: .topTrailing) {
+                                        Image(systemName: "bubble.left.and.bubble.right")
+                                            .font(.system(size: 14))
+                                        if center.unreadCount(for: device.id) > 0 {
+                                            Text("\(center.unreadCount(for: device.id))")
+                                                .font(.system(size: 9, weight: .bold))
+                                                .foregroundStyle(.white)
+                                                .padding(.horizontal, 4).padding(.vertical, 1)
+                                                .background(Color.red, in: Capsule())
+                                                .offset(x: 8, y: -7)
+                                        }
+                                    }
+                                }
+                                .buttonStyle(.borderless)
+                                .help("Chat")
+                                .accessibilityLabel("Chat")
                             }
                             if let controller = mesh.sessionController {
                                 Button("Connect") {

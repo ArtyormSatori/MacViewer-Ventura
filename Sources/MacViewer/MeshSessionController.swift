@@ -58,6 +58,15 @@ final class MeshSessionController: ObservableObject {
     /// localized). Views render it as-is.
     @Published private(set) var statusMessage: String?
 
+    /// Fan-out hooks (Phase 3, chunk 3): this controller is the
+    /// signaling stream's only subscriber, so traffic that is not a
+    /// session message (chat envelopes; media in M1) and server
+    /// refusals (which carry no correlation ID) are also offered to
+    /// these optional handlers, set by the owner. Session behavior
+    /// is unchanged while they are nil.
+    var onUnhandledSignal: (@MainActor (SignalEnvelope) -> Void)?
+    var onServerError: (@MainActor (MeshError) -> Void)?
+
     /// True when a new outgoing request may be started.
     var canStartSession: Bool {
         switch phase {
@@ -208,7 +217,10 @@ final class MeshSessionController: ObservableObject {
 
     private func handle(_ envelope: SignalEnvelope) {
         guard let message = MeshSessionMessage(data: envelope.data) else {
-            return // Media signaling (M1) or unrelated traffic.
+            // Chat (chunk 3) today, media signaling (M1) later:
+            // whatever it is, it is not this state machine's.
+            onUnhandledSignal?(envelope)
+            return
         }
         let from = envelope.from
         switch message.kind {
@@ -287,12 +299,16 @@ final class MeshSessionController: ObservableObject {
     }
 
     private func handleServerError(_ error: MeshError) {
-        // This chunk's only sends are session messages, so a server
-        // refusal while a request is unanswered means the request
-        // could not be delivered (peer offline or grant missing).
-        guard case let .outgoingPending(_, peer, peerName, _) = phase else { return }
-        finish(.peerUnreachable,
-               message: LF("Could not reach %@.", peerName ?? peer.formatted))
+        // A server refusal while a request is unanswered means the
+        // request could not be delivered (peer offline or grant
+        // missing). Since chunk 3 the chat center also sends on
+        // this channel; refusals carry no correlation, so both
+        // consumers interpret them (see MeshChatCenter's comment).
+        if case let .outgoingPending(_, peer, peerName, _) = phase {
+            finish(.peerUnreachable,
+                   message: LF("Could not reach %@.", peerName ?? peer.formatted))
+        }
+        onServerError?(error)
     }
 
     // MARK: Timeout

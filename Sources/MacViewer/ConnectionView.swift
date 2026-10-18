@@ -11,6 +11,7 @@ struct ConnectionView: View {
     @ObservedObject var updater: UpdateChecker
     @StateObject private var mesh = MeshSessionModel()
     @State private var meshSessionWindows = MeshSessionWindows()
+    @State private var meshChatWindows = MeshChatWindows()
     @AppStorage(AppMode.defaultsKey) private var appMode = AppMode.ultraViewer
     @AppStorage(MeshDefaults.serverAddressKey) private var meshServerAddress = ""
     @State private var remoteDisplayScale: RemoteDisplayScale = .fit
@@ -34,7 +35,11 @@ struct ConnectionView: View {
                 Divider()
                 modeSwitchBar
                 Divider()
-                if appMode == .selfHosted { MeshModeView(mesh: mesh) } else { dashboard }
+                if appMode == .selfHosted {
+                    MeshModeView(mesh: mesh, onOpenChat: { device in
+                        meshChatWindows.show(peer: device.id, name: device.name)
+                    })
+                } else { dashboard }
             }
         }
         .background(Color(nsColor: .windowBackgroundColor))
@@ -68,6 +73,12 @@ struct ConnectionView: View {
         .onChange(of: meshServerAddress) { _ in Task { await mesh.serverChanged() } }
         .onReceive(mesh.$sessionController.compactMap { $0 }) { controller in
             meshSessionWindows.bind(to: controller)
+            meshSessionWindows.onOpenChat = { peer, name in
+                meshChatWindows.show(peer: peer, name: name)
+            }
+        }
+        .onReceive(mesh.$chatCenter.compactMap { $0 }) { center in
+            meshChatWindows.bind(to: center)
         }
         .onChange(of: hosting.identifier) { id in if id == nil { revealPassword = false } }
         .onChange(of: model.phase) { phase in

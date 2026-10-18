@@ -413,3 +413,10 @@
 "View" = "View";
 "The request is no longer waiting." = "The request is no longer waiting.";
 "Session ended" = "Session ended";
+"Chat with %@" = "Chat with %@";
+"Sending…" = "Sending…";
+"Sent" = "Sent";
+"Not delivered" = "Not delivered";
+"Type a message…" = "Type a message…";
+"No messages yet." = "No messages yet.";
+"%@ is offline. Chat works while both devices are connected to the mesh server." = "%@ is offline. Chat works while both devices are connected to the mesh server.";

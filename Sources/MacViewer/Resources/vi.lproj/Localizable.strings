@@ -413,3 +413,10 @@
 "View" = "Xem";
 "The request is no longer waiting." = "Yêu cầu không còn chờ nữa.";
 "Session ended" = "Phiên đã kết thúc";
+"Chat with %@" = "Trò chuyện với %@";
+"Sending…" = "Đang gửi…";
+"Sent" = "Đã gửi";
+"Not delivered" = "Không gửi được";
+"Type a message…" = "Nhập tin nhắn…";
+"No messages yet." = "Chưa có tin nhắn nào.";
+"%@ is offline. Chat works while both devices are connected to the mesh server." = "%@ đang ngoại tuyến. Trò chuyện hoạt động khi cả hai thiết bị cùng kết nối tới máy chủ mesh.";

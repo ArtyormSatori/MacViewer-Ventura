@@ -72,6 +72,9 @@ struct MeshConsentView: View {
 struct MeshSessionWindowView: View {
     @ObservedObject var controller: MeshSessionController
     var onClose: () -> Void
+    /// Opens the shared chat window with the session's peer
+    /// (Phase 3, chunk 3); nil hides the Chat action.
+    var onOpenChat: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -104,6 +107,10 @@ struct MeshSessionWindowView: View {
                 Text("Signaling connected · media arrives with the M1 update")
                     .font(.caption).foregroundStyle(.secondary)
                 HStack {
+                    if let onOpenChat {
+                        Button("Chat") { onOpenChat() }
+                            .buttonStyle(.bordered)
+                    }
                     Spacer()
                     Button("End session", role: .destructive) { controller.endSession() }
                         .buttonStyle(.bordered)
@@ -169,6 +176,9 @@ final class MeshSessionWindows: NSObject, NSWindowDelegate {
     private var phaseSink: AnyCancellable?
     private weak var controller: MeshSessionController?
     private var lastPhase: MeshSessionController.Phase = .idle
+    /// Opens the shared chat window for a peer (Phase 3, chunk 3);
+    /// set by ConnectionView, which owns the chat windows.
+    var onOpenChat: ((MeshID, String?) -> Void)?
 
     func bind(to controller: MeshSessionController) {
         guard self.controller !== controller else { return }
@@ -241,8 +251,15 @@ final class MeshSessionWindows: NSObject, NSWindowDelegate {
         if sessionWindow == nil {
             let window = makeWindow(
                 title: L("Mesh session"),
-                view: MeshSessionWindowView(controller: controller,
-                                            onClose: { [weak self] in self?.sessionWindow?.close() }),
+                view: MeshSessionWindowView(
+                    controller: controller,
+                    onClose: { [weak self] in self?.sessionWindow?.close() },
+                    onOpenChat: { [weak self, weak controller] in
+                        guard let controller,
+                              case let .active(_, peer, peerName, _, _, _) = controller.phase
+                        else { return }
+                        self?.onOpenChat?(peer, peerName)
+                    }),
                 floating: false)
             window.delegate = self
             sessionWindow = window
