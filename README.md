@@ -62,7 +62,7 @@ Chi tiết kỹ thuật bản vá Ventura: [VENTURA.md](VENTURA.md).
 3. Mở lần đầu: **chuột phải → Open → Open**. (Hoặc: `xattr -dr com.apple.quarantine /Applications/MacViewer.app`)
 4. Chỉ khi làm host: cấp quyền **Ghi màn hình** và **Trợ năng** theo hướng dẫn trong app.
 
-Chi tiết từng bước: [HUONG_DAN_CAI_DAT.md](HUONG_DAN_CAI_DAT.md).
+Chi tiết từng bước: [readme.txt](readme.txt).
 
 ## Cập nhật
 
@@ -70,7 +70,7 @@ App tự kiểm tra bản mới tại repo này. Khi có bản mới, bấm **C�
 
 ## Tài liệu
 
-- [HUONG_DAN_CAI_DAT.md](HUONG_DAN_CAI_DAT.md) — cài đặt, cấp quyền, sử dụng
+- [readme.txt](readme.txt) — cài đặt, cấp quyền, sử dụng
 - [VENTURA.md](VENTURA.md) — chi tiết kỹ thuật bản vá Ventura
 - [SECURITY_AUDIT.md](SECURITY_AUDIT.md) — rà soát bảo mật
 - [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md) — lộ trình tính năng, giới hạn đã đo
@@ -133,7 +133,7 @@ Ventura patch technical details: [VENTURA.md](VENTURA.md).
 3. First launch: **right-click → Open → Open**. (Or: `xattr -dr com.apple.quarantine /Applications/MacViewer.app`)
 4. Host only: grant **Screen Recording** and **Accessibility** as prompted in the app.
 
-Step-by-step details: [HUONG_DAN_CAI_DAT.md](HUONG_DAN_CAI_DAT.md).
+Step-by-step details: [readme.txt](readme.txt).
 
 ## Updates
 
@@ -141,7 +141,7 @@ The app checks this repo for new versions. When one is available, click **Update
 
 ## Documentation
 
-- [HUONG_DAN_CAI_DAT.md](HUONG_DAN_CAI_DAT.md) — install, permissions, usage
+- [readme.txt](readme.txt) — install, permissions, usage
 - [VENTURA.md](VENTURA.md) — Ventura patch technical details
 - [SECURITY_AUDIT.md](SECURITY_AUDIT.md) — security audit
 - [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md) — feature roadmap, measured limits

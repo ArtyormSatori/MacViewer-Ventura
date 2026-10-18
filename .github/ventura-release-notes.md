@@ -6,7 +6,7 @@
 - Giữ nguyên toàn bộ tính năng hiện có: chứng thư Sectigo R46 nhúng sẵn, điều khiển bật sẵn + chất lượng Ưu tiên tự áp dụng, truy cập không người trực, gõ VNI/Unicode, dithering Bayer.
 - Sửa ba lỗi từ sử dụng thực tế: phím ⌘ giờ hoạt động như Ctrl phía Windows (⌘C/⌘V sao chép và dán bình thường, đổi lại được trong Cài đặt → Bàn phím); văn bản chép trên Mac dán được sang Windows với mọi đời UltraViewer; phiên điều khiển chịu được mạng chập chờn, không còn tự ngắt chỉ vì một lần mất tín hiệu giữ kết nối.
 
-**Cài thủ công lần đầu:** xem HUONG_DAN_CAI_DAT.md (bỏ qua mục 2 nếu không dùng bản 1.0).
+**Cài thủ công lần đầu:** xem file readme.txt đính kèm kèm release này (bỏ qua mục 2 nếu không dùng bản 1.0).
 
 Nếu macOS báo "nhà phát triển chưa xác định" khi mở lần đầu sau khi cài thủ công, chạy lệnh này trong Terminal (một lần duy nhất): `xattr -dr com.apple.quarantine /Applications/MacViewer.app` — hoặc mở app bằng chuột phải → Open.
 
@@ -22,7 +22,7 @@ CI: toàn bộ test chạy trước khi đóng gói. Đối chiếu bản tải 
 - All existing features kept: bundled Sectigo R46 certificate, control on + Prefer-quality applied automatically, unattended access, VNI/Unicode typing, Bayer dithering.
 - Three field-reported fixes: the Command key now acts as Ctrl on the Windows side (⌘C/⌘V copy and paste work; switchable in Settings → Keyboard); text copied on the Mac pastes on Windows across UltraViewer versions; sessions ride out transient network drops instead of disconnecting on a single lost keepalive.
 
-**First manual install:** see HUONG_DAN_CAI_DAT.md (skip section 2 unless you use release 1.0).
+**First manual install:** see the readme.txt attached to this release (skip section 2 unless you use release 1.0).
 
 If macOS shows the "unidentified developer" warning on the first launch after a manual install, run this once in Terminal: `xattr -dr com.apple.quarantine /Applications/MacViewer.app` — or open the app with right-click → Open.
 
