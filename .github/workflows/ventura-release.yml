@@ -65,7 +65,7 @@ jobs:
         run: |
           cd release
           shasum -a 256 * > SHA256SUMS-macOS.txt
-          cat SHA256SUMS-Ventura.txt
+          cat SHA256SUMS-macOS.txt
 
       - name: Publish release
         env:
