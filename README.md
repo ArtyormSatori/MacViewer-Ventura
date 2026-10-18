@@ -22,7 +22,7 @@ Tài liệu hai phần · Documentation in two parts: [Tiếng Việt](#tổng-q
 
 ## Tổng quan
 
-MacViewer Ventura là client macOS mã nguồn mở cho UltraViewer — phần mềm điều khiển máy tính từ xa chỉ có bản Windows. MacViewer Ventura chạy trên **macOS 13 Ventura trở lên** (Intel và Apple Silicon). Không phải sản phẩm chính thức của UltraViewer; chỉ kết nối tới máy bạn được phép truy cập.
+MacViewer Ventura là client macOS mã nguồn mở cho UltraViewer — phần mềm điều khiển máy tính từ xa chỉ có bản Windows. MacViewer Ventura chạy trên **macOS 13 Ventura trở lên** (Intel và Apple Silicon). Ngoài bản Mac, dự án còn có **bản dựng cho Linux** đính kèm tại các release, với cùng khả năng kết nối. Không phải sản phẩm chính thức của UltraViewer; chỉ kết nối tới máy bạn được phép truy cập.
 
 ## App làm gì
 
@@ -97,7 +97,7 @@ Giấy phép MIT — xem [LICENSE](LICENSE). Thư viện bên thứ ba giữ gi�
 
 ## Overview
 
-MacViewer Ventura is an open-source macOS client for UltraViewer — remote-control software that ships for Windows only. MacViewer Ventura runs on **macOS 13 Ventura and later** (Intel and Apple Silicon). Not an official UltraViewer product; connect only to machines you are permitted to access.
+MacViewer Ventura is an open-source macOS client for UltraViewer — remote-control software that ships for Windows only. MacViewer Ventura runs on **macOS 13 Ventura and later** (Intel and Apple Silicon). The project also ships a **Linux build**, attached to the releases, with the same connection capabilities. Not an official UltraViewer product; connect only to machines you are permitted to access.
 
 ## What the app does
 
