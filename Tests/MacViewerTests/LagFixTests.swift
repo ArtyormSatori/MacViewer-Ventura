@@ -121,28 +121,58 @@ struct LagFixTests {
         adapter.events[0].yield(.connected(RemoteSessionInfo(partnerID: "123456789", allowsRemoteInput: true)))
         try await settle { model.phase == .connected }
 
-        // 300 frames, with a pointer move interleaved every 25 —
-        // the soak shape from the audit: production far above a
-        // comfortable presentation rate, input mixed into the flood.
+        // 300 frames, with input interleaved every 25 — the soak
+        // shape from the audit: production far above a comfortable
+        // presentation rate, input mixed into the flood. Each
+        // interleave is a pointer move immediately bracketed by a
+        // discrete click (button down/up at the same position).
+        //
+        // The bracketing is load-bearing. RemoteInputBuffer coalesces
+        // a move into the immediately preceding *still-pending* move
+        // by design (see "Pending adjacent moves coalesce…" in
+        // ConnectionModelTests): a bare stream of queued moves
+        // legitimately collapses to the latest position, so expecting
+        // all 12 raw moves here would assert behaviour the product
+        // deliberately does not have. Discrete button events are
+        // ordered, non-coalescable boundaries, so with a click
+        // between them no two moves are ever adjacent-pending and the
+        // full sequence — moves included — must arrive in order:
+        // the true contract is that a frame blast loses and reorders
+        // NO discrete input, and the pointer position delivered last
+        // is the newest one.
         var frames: [RemoteScreenFrame] = []
+        var expectedInputs: [RemoteInput] = []
         var moves: [RemoteInput] = []
+        var clicks: [RemoteInput] = []
         for index in 1...300 {
             let frame = try makeFrame()
             frames.append(frame)
             adapter.events[0].yield(.frame(frame))
             if index % 25 == 0 {
                 let move = RemoteInput.pointerMoved(x: index, y: index)
+                let down = RemoteInput.pointerButton(button: 0, pressed: true, x: index, y: index)
+                let up = RemoteInput.pointerButton(button: 0, pressed: false, x: index, y: index)
                 moves.append(move)
+                clicks.append(contentsOf: [down, up])
+                expectedInputs.append(contentsOf: [move, down, up])
                 model.send(move)
+                model.send(down)
+                model.send(up)
             }
         }
         try await settle { model.presentedFrames == 300 }
+        try await settle { adapter.inputs == expectedInputs }
         // The screen shows the newest frame, every interleaved input
-        // was delivered in order (none waited behind the flood), and
-        // the adapter received one consumption signal per frame —
-        // the signal that releases ACK pacing in the session (FX-2).
+        // was delivered in order (none waited behind the flood — the
+        // discrete clicks all landed, and the final pointer position
+        // delivered is the last move), and the adapter received one
+        // consumption signal per frame — the signal that releases
+        // ACK pacing in the session (FX-2).
         #expect(model.frame?.id == frames.last?.id)
-        #expect(adapter.inputs == moves)
+        #expect(adapter.inputs == expectedInputs)
+        #expect(adapter.inputs.filter { $0.isPointerButton } == clicks)
+        #expect(adapter.inputs.filter { $0.isPointerMove } == moves)
+        #expect(adapter.inputs.last(where: { $0.isPointerMove }) == .pointerMoved(x: 300, y: 300))
         #expect(adapter.frameConsumptions == 300)
         model.disconnect()
     }
@@ -206,6 +236,18 @@ struct LagFixTests {
             space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ))
         return RemoteScreenFrame(image: try #require(context.makeImage()))
+    }
+}
+
+private extension RemoteInput {
+    var isPointerMove: Bool {
+        if case .pointerMoved = self { return true }
+        return false
+    }
+
+    var isPointerButton: Bool {
+        if case .pointerButton = self { return true }
+        return false
     }
 }
 

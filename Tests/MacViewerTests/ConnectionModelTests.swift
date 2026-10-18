@@ -251,7 +251,13 @@ struct ConnectionModelTests {
         try await settle { model.remoteInfo?.allowsRemoteInput == true }
         #expect(!model.controlEnabled)
         model.send(.pointerMoved(x: 1, y: 1))
-        #expect(adapter.inputs.last == .releaseAll)
+        // The release enqueued when the user turned control off (and
+        // re-established by the regrant's fresh queue) is delivered by
+        // the input drain. Since FX-3 every send runs through the
+        // SessionSendRace's extra executor hops, so delivery is
+        // genuinely asynchronous — settle for it, like the sibling
+        // tests do, instead of expecting it to have landed already.
+        try await settle { adapter.inputs.last == .releaseAll }
         model.disconnect()
     }
 
