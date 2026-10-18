@@ -1,111 +1,84 @@
 <div align="center">
 
-<img src="docs/images/app-icon.png" width="128" alt="Biểu tượng MacViewer">
+<img src="docs/images/app-icon.png" width="128" alt="Biểu tượng MacViewer Ventura">
 
 # MacViewer Ventura
 
-**Điều khiển máy Windows chạy UltraViewer ngay từ máy Mac Ventura của bạn — và cho người khác truy cập máy Mac của bạn khi bạn đồng ý.**
+**Client UltraViewer cho macOS: điều khiển máy Windows từ máy Mac, và ngược lại.**
 
-**Tiếng Việt** · [English](README.en.md)
-
-### [Tải bản mới nhất cho macOS Ventura](https://github.com/ArtyormSatori/MacViewer-Ventura/releases/latest)
-
-Chạy trên **macOS 13 Ventura trở lên** (cả máy Intel và Apple Silicon)
+[Tải bản mới nhất](https://github.com/ArtyormSatori/MacViewer-Ventura/releases/latest) · macOS 13 Ventura trở lên · Intel + Apple Silicon
 
 [![Release](https://img.shields.io/github/v/release/ArtyormSatori/MacViewer-Ventura)](https://github.com/ArtyormSatori/MacViewer-Ventura/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![Platform](https://img.shields.io/badge/platform-macOS%2013%20Ventura-lightgrey)
 ![Swift](https://img.shields.io/badge/Swift-6-orange)
+
+**Tiếng Việt** · [English](README.en.md)
 
 </div>
 
----
+## Tổng quan
 
-Repo này là bản fork của [DeanOpen/MacViewer](https://github.com/DeanOpen/MacViewer) (bản gốc 0.3.4), được vá để **chạy trên macOS 13 Ventura** — bản gốc yêu cầu macOS 14 nên máy Ventura không mở được. Toàn bộ tính năng của bản gốc được giữ nguyên; các thay đổi dành riêng cho Ventura được ghi trong [VENTURA.md](VENTURA.md).
+Fork của [MacViewer 0.3.4](https://github.com/DeanOpen/MacViewer) (tác giả DeanOpen). MacViewer là client macOS mã nguồn mở cho UltraViewer — phần mềm điều khiển máy tính từ xa chỉ có bản Windows. Fork này hạ yêu cầu hệ điều hành từ macOS 14 xuống **macOS 13** và bổ sung các thay đổi ở bảng "Khác bản gốc". Không phải sản phẩm chính thức của UltraViewer; chỉ kết nối tới máy bạn được phép truy cập.
 
-[UltraViewer](https://ultraviewer.net/vi/) chỉ có bản cho Windows. MacViewer là ứng dụng macOS thuần viết bằng SwiftUI/AppKit, không cần Wine và không chạy bất kỳ file `.exe` nào của Windows.
+## App làm gì
 
-> [!IMPORTANT]
-> Đây là dự án mã nguồn mở, **không phải** sản phẩm chính thức của UltraViewer và không liên quan đến đội ngũ phát triển UltraViewer. Chỉ kết nối tới những máy mà bạn được phép truy cập.
+- **Viewer:** nhập ID + mật khẩu của máy đang chạy UltraViewer/MacViewer → xem màn hình, điều khiển chuột và bàn phím.
+- **Host:** cho máy khác kết nối vào máy Mac, sau khi chủ máy duyệt (quyền xem và quyền điều khiển cấp riêng).
+- **Đường truyền:** TLS qua relay của UltraViewer; hai máy cùng LAN thì kết nối trực tiếp.
+- **Phụ trợ:** chat, clipboard văn bản hai chiều, chụp màn hình + ghi chú, quay video phiên, nghe âm thanh của máy kia, lưu mật khẩu đối tác vào Keychain.
 
-## Ứng dụng gốc: MacViewer của DeanOpen là gì?
+## Khác bản gốc
 
-**MacViewer** là ứng dụng macOS mã nguồn mở do **DeanOpen** phát triển, đưa khả năng của UltraViewer — phần mềm điều khiển máy tính từ xa vốn **chỉ có trên Windows** — lên máy Mac, mà không cần Wine hay chạy file `.exe` nào.
+| Hạng mục | Bản gốc 0.3.4 | Fork này |
+| --- | --- | --- |
+| Hệ điều hành | macOS 14+ | macOS 13+ (deployment target 13.0; API macOS 14 được thay thế hoặc bọc điều kiện) |
+| Chứng thư relay | Dùng kho hệ thống — Ventura thiếu gốc Sectigo R46, kết nối thất bại | Nhúng R46 làm trust anchor bổ sung; giữ nguyên neo hệ thống và ghim tên chứng thư |
+| Điều khiển từ xa | Mặc định tắt (chỉ xem) | Mặc định bật khi kết nối (máy host vẫn là bên quyết định quyền) |
+| Chất lượng hình | Mặc định Tự động (45), chỉ gửi khi người dùng đổi tay | Mặc định Ưu tiên chất lượng (70), tự gửi khi kết nối |
+| Cập nhật | Chiếu tới repo gốc | Trỏ về repo này; tự cài tại chỗ sau khi đối chiếu SHA-256 với bảng tổng công bố; gỡ quarantine khỏi bản mới nên không còn cảnh báo Gatekeeper (từ ventura.3) |
+| Truy cập không người trực | Không có | Tự duyệt sau khi bằng chứng mật khẩu khớp; tuỳ chọn mở cùng lúc đăng nhập, chống ngủ khi chia sẻ (mặc định tắt) |
+| Bàn phím | Keycode US | Thêm VNI passthrough và văn bản Unicode (Cài đặt → Bàn phím) |
+| Hình phía host | Cắt cụt về RGB555; chụp cố định mỗi 250 ms | Dithering Bayer 4×4; nhịp chụp thích ứng 50–1000 ms |
+| Lưu mật khẩu | Keychain theo mặc định nền tảng | `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` |
+| Tên / phiên bản | MacViewer / 0.3.4 | **MacViewer Ventura** / 4.0 trở đi (nền kỹ thuật giữ nguyên 0.3.4) |
 
-App dùng để làm gì:
+Chi tiết kỹ thuật bản vá Ventura: [VENTURA.md](VENTURA.md).
 
-- **Điều khiển máy khác từ máy Mac của bạn:** nhập **ID và mật khẩu** đang hiển thị trên UltraViewer (hoặc MacViewer) của máy kia là bạn thấy màn hình của họ và điều khiển được chuột, bàn phím — như đang ngồi trước máy đó. Đây là cách phổ biến để hỗ trợ kỹ thuật, sửa máy từ xa cho người thân, đồng nghiệp.
-- **Cho người khác truy cập máy Mac của bạn:** khi bạn cho phép, người kia xem được màn hình máy Mac của bạn và điều khiển nó, sau khi bạn bấm đồng ý trên máy của mình.
-- Kết nối được **mã hóa** và đi qua máy chủ trung gian (relay) của UltraViewer; hai máy cùng mạng LAN thì kết nối trực tiếp cho nhanh.
-- Kèm theo: **chat** với người bên kia, **đồng bộ clipboard** văn bản hai chiều, chụp màn hình có ghi chú, **quay video** phiên điều khiển, và lưu mật khẩu đối tác vào **Keychain** của macOS cho lần kết nối sau.
+## Giới hạn
 
-Dự án gốc: [github.com/DeanOpen/MacViewer](https://github.com/DeanOpen/MacViewer) — bản gốc (0.3.4) yêu cầu **macOS 14 Sonoma trở lên**. Toàn bộ phần giao thức, giao diện và tính năng nền của app là công sức của tác giả gốc; bản fork này đứng trên đó và chỉ thay đổi những gì cần thiết cho Ventura cùng vài cải tiến bên dưới.
-
-## Bản fork MacViewer Ventura thêm gì, sửa gì
-
-- **Chạy được trên macOS 13 Ventura trở lên** (bản gốc đòi macOS 14).
-- **Không cần nạp chứng thư vào Keychain nữa**: chứng thư gốc Sectigo R46 mà máy chủ UltraViewer dùng (kho tin cậy của Ventura chưa có) đã được nhúng sẵn trong app — cài là kết nối được ngay.
-- **Điều khiển bật sẵn**: kết nối tới máy Windows là điều khiển được ngay, không phải bật tay công tắc Điều khiển nữa (máy kia vẫn là bên quyết định cho phép hay không).
-- **Chất lượng hình mặc định "Ưu tiên chất lượng"** và tự áp dụng ngay khi kết nối.
-- **Tự cập nhật ngay trong app, không còn cảnh báo "nhà phát triển chưa xác định"**: từ bản ventura.3, app tự tải bản mới, đối chiếu mã SHA-256 với bảng tổng đã công bố, cài đè và tự mở lại. (Riêng lần cài ventura.3 vẫn cần mở tay một lần như mục Cài đặt bên dưới.)
-- **Truy cập không cần người ngồi máy** (khi máy Mac làm máy chủ): tự duyệt sau khi mật khẩu đã được xác minh, có thể bật khởi động cùng máy và ngăn máy ngủ khi đang chia sẻ.
-- **Bàn phím tiếng Việt**: thêm chế độ gõ VNI và chế độ văn bản Unicode bên cạnh chế độ phím US truyền thống (Cài đặt → Bàn phím).
-- **Hình mượt hơn trong giới hạn giao thức**: dithering Bayer khi quy về màu 16-bit của giao thức và nhịp chụp màn hình thích ứng phía máy chủ.
-
-## Tính năng
-
-### Kết nối tới máy khác
-
-- Nhập **ID và mật khẩu** hiện trên UltraViewer của máy kia là kết nối được
-- Kết nối được mã hóa, đi qua máy chủ trung gian có TLS; nếu hai máy cùng mạng LAN thì tự kết nối trực tiếp cho nhanh
-- Điều khiển chuột, bàn phím; phím được chuyển đổi sẵn: <kbd>⌘</kbd> → Win, <kbd>⌥</kbd> → Alt, <kbd>⌃</kbd> → Ctrl; cuộn bằng trackpad hay chuột đều được
-- Thanh công cụ: chọn màn hình, thu phóng, chất lượng hình, ẩn/hiện hình nền, con trỏ chuột và **nghe âm thanh từ máy kia**
-- Chụp màn hình (chọn vùng, ghi chú lên ảnh) và **quay video**
-- **Chat** với người bên kia và đồng bộ **clipboard** văn bản hai chiều (có thể tắt trong Cài đặt)
-- Có thể lưu mật khẩu vào **Keychain** của macOS cho lần sau
-
-### Cho người khác truy cập máy Mac
-
-- Người khác chỉ xem hoặc điều khiển được sau khi bạn bấm đồng ý trên máy Mac (hoặc tự động khi bạn bật truy cập không cần người ngồi máy và mật khẩu khớp)
-- Có hướng dẫn từng bước để bật quyền **Ghi màn hình** và **Trợ năng**
-- Quyền xem và quyền điều khiển được duyệt riêng; ngắt kết nối hoặc khóa truy cập bất cứ lúc nào
-
-### Chưa hỗ trợ
-
-- Gửi file (giao thức UltraViewer không có lệnh truyền file; đang nằm trong [lộ trình](FEATURE_ROADMAP.md) cho trường hợp cả hai đầu đều là MacViewer)
-- Nói chuyện qua micro, phát âm thanh khi chia sẻ máy Mac, chia sẻ nhiều màn hình Mac cùng lúc
-- Chất lượng hình kiểu RustDesk (video H.264/UDP) — không thể đạt được qua giao thức UltraViewer
+- Không truyền file: giao thức UltraViewer không có lệnh truyền file (đang làm cho trường hợp Mac↔Mac, xem [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md)).
+- Màu hình giới hạn ở RGB555 + atlas JPEG theo giao thức; không có video H.264/UDP kiểu RustDesk.
+- Máy Ventura làm host: ảnh chụp không kèm con trỏ chuột (giới hạn API cũ).
+- App ký ad-hoc: lần cài đầu tiên mở bằng chuột phải → Open; cập nhật trong app thì không cần.
 
 ## Cài đặt
 
-Hướng dẫn đầy đủ, có hình dung từng bước: **[HUONG_DAN_CAI_DAT.md](HUONG_DAN_CAI_DAT.md)**. Tóm tắt:
+1. Tải `MacViewer-Ventura-<phiên bản>.dmg` (hoặc `.zip`) ở [Releases](https://github.com/ArtyormSatori/MacViewer-Ventura/releases/latest).
+2. Kéo `MacViewer.app` vào thư mục **Applications**.
+3. Mở lần đầu: **chuột phải → Open → Open**. (Hoặc: `xattr -dr com.apple.quarantine /Applications/MacViewer.app`)
+4. Chỉ khi làm host: cấp quyền **Ghi màn hình** và **Trợ năng** theo hướng dẫn trong app.
 
-1. Vào trang [**Releases**](https://github.com/ArtyormSatori/MacViewer-Ventura/releases/latest) và tải file `MacViewer-Ventura-<phiên bản>.dmg` (hoặc `.zip`).
-2. Mở file DMG, kéo **MacViewer** thả vào thư mục **Applications**.
-3. Lần đầu mở: nhấp **chuột phải** vào MacViewer → **Open** → **Open** (bản build ký ad-hoc nên macOS hỏi một lần). Hoặc chạy lệnh: `xattr -dr com.apple.quarantine /Applications/MacViewer.app`
-4. Cấp quyền **Ghi màn hình** và **Trợ năng** khi app hướng dẫn (chỉ cần khi bạn cho người khác truy cập máy Mac của bạn).
+Chi tiết từng bước: [HUONG_DAN_CAI_DAT.md](HUONG_DAN_CAI_DAT.md).
 
-Từ bản ventura.3 trở đi, khi có bản mới app sẽ tự báo và tự cài — bạn không cần lặp lại các bước trên. Bản 4.0 này chính là bản cập nhật đầu tiên được giao qua cơ chế đó cho máy đã cài ventura.3.
+## Cập nhật
+
+App tự kiểm tra bản mới tại repo này. Khi có bản mới, bấm **Cập nhật và khởi động lại**: app tải về, kiểm SHA-256, cài đè và tự mở lại.
 
 ## Tài liệu
 
-- [HUONG_DAN_CAI_DAT.md](HUONG_DAN_CAI_DAT.md) — cài đặt, cấp quyền, sử dụng, gỡ chứng thư cũ
-- [VENTURA.md](VENTURA.md) — đã thay đổi những gì để chạy trên Ventura, và vì sao
-- [SECURITY_AUDIT.md](SECURITY_AUDIT.md) — rà soát bảo mật toàn bộ mã nguồn
-- [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md) — lộ trình tính năng và các giới hạn kỹ thuật đã đo
+- [HUONG_DAN_CAI_DAT.md](HUONG_DAN_CAI_DAT.md) — cài đặt, cấp quyền, sử dụng
+- [VENTURA.md](VENTURA.md) — chi tiết kỹ thuật bản vá Ventura
+- [SECURITY_AUDIT.md](SECURITY_AUDIT.md) — rà soát bảo mật
+- [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md) — lộ trình tính năng, giới hạn đã đo
 
 ## Build từ mã nguồn
 
-Xem mục "Build từ mã nguồn" trong [VENTURA.md](VENTURA.md). Lưu ý: máy *build* cần macOS 14.5+ và Xcode 16 (Xcode không chạy trên Ventura); app build ra chạy trên Ventura. Mỗi lần push lên `main`, GitHub Actions tự chạy toàn bộ test, đóng gói bản universal và đăng lên Releases.
+Máy build cần macOS 14.5+ và Xcode 16 (app build ra chạy trên macOS 13+). GitHub Actions chạy toàn bộ test và đóng gói bản universal mỗi lần push lên `main`. Xem [VENTURA.md](VENTURA.md).
 
 ## Quyền riêng tư
 
-MacViewer không thu thập bất kỳ dữ liệu nào. Khi kiểm tra bản cập nhật, ứng dụng chỉ đọc thông tin phiên bản công khai trên GitHub (có thể tắt trong Cài đặt). Mật khẩu chỉ được lưu khi bạn chọn ghi nhớ, và chỉ lưu trong Keychain của macOS. Lịch sử kết nối chỉ lưu ID, không bao giờ lưu mật khẩu.
+Không thu thập dữ liệu. Kiểm tra cập nhật chỉ đọc thông tin công khai trên GitHub (tắt được trong Cài đặt). Mật khẩu chỉ lưu vào Keychain khi người dùng chọn; lịch sử kết nối chỉ lưu ID.
 
 ## Giấy phép
 
-MacViewer phát hành theo [giấy phép MIT](LICENSE) — giữ nguyên của dự án gốc [DeanOpen/MacViewer](https://github.com/DeanOpen/MacViewer).
-
-Các thư viện bên thứ ba vẫn giữ giấy phép riêng của chúng, xem [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). File `8bit.dat` là dữ liệu lấy từ UltraViewer và **không** thuộc giấy phép MIT.
-
-UltraViewer là thương hiệu của chủ sở hữu tương ứng, chỉ được nhắc đến ở đây để nói rõ khả năng tương thích.
+MIT, giữ nguyên của dự án gốc. Thư viện bên thứ ba giữ giấy phép riêng: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). File `8bit.dat` là dữ liệu của UltraViewer, không thuộc MIT. UltraViewer là thương hiệu của chủ sở hữu tương ứng.

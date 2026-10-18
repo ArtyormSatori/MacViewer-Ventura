@@ -1,27 +1,11 @@
-<div align="center">
+# MacViewer Ventura
 
-# MacViewer for macOS 13 Ventura
+An UltraViewer client for macOS — control a Windows machine from your Mac, and vice versa. Fork of [MacViewer 0.3.4](https://github.com/DeanOpen/MacViewer) by DeanOpen, patched to run on **macOS 13 Ventura and later** (Intel + Apple Silicon).
 
-**Control a Windows machine running UltraViewer from your Ventura Mac.**
+[Download the latest release](https://github.com/ArtyormSatori/MacViewer-Ventura/releases/latest)
 
-[Vietnamese (primary documentation)](README.md) · **English**
+Differences from upstream: deployment target macOS 13; the Sectigo R46 root used by UltraViewer's relay is bundled as an additional trust anchor (Ventura's trust store predates it); remote control and the "Prefer quality" preset are on by default at connect; checksum-verified in-app self-update that strips quarantine from the staged copy (no Gatekeeper prompt for updates, from ventura.3); unattended access for the host direction; VNI/Unicode keyboard modes; Bayer dithering and adaptive host capture pacing; Keychain items stored as `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`. Product name is **MacViewer Ventura**, versioned 4.0+ on the unchanged 0.3.4 base.
 
-### [Download the latest Ventura build](https://github.com/ArtyormSatori/MacViewer-Ventura/releases/latest)
+Full documentation is in Vietnamese: [README.md](README.md) · install guide [HUONG_DAN_CAI_DAT.md](HUONG_DAN_CAI_DAT.md) · porting notes [VENTURA.md](VENTURA.md) · security audit [SECURITY_AUDIT.md](SECURITY_AUDIT.md).
 
-</div>
-
----
-
-This repository is a fork of [DeanOpen/MacViewer](https://github.com/DeanOpen/MacViewer) (upstream 0.3.4) patched to run on **macOS 13 Ventura** — upstream requires macOS 14. All upstream features are preserved.
-
-Differences from upstream:
-
-- Runs on macOS 13 Ventura (Intel + Apple Silicon universal build).
-- The Sectigo R46 root used by UltraViewer's relay is bundled in the app (Ventura's trust store predates it), so no Keychain certificate import is needed.
-- Remote control is enabled by default when a session connects, and the "Prefer quality" picture preset is applied automatically.
-- In-app self-update verifies downloads against the published SHA-256 checksums and installs without the Gatekeeper "unidentified developer" prompt (from ventura.3 onward; the first install of ventura.3 still needs one right-click → Open).
-- Unattended access for the Mac-as-host direction, VNI/Unicode keyboard modes, Bayer dithering and adaptive host capture pacing.
-
-Full documentation is in Vietnamese: install guide [HUONG_DAN_CAI_DAT.md](HUONG_DAN_CAI_DAT.md), porting notes [VENTURA.md](VENTURA.md), security audit [SECURITY_AUDIT.md](SECURITY_AUDIT.md), roadmap [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md).
-
-This is an unofficial open-source project, not affiliated with UltraViewer. MIT license (see [LICENSE](LICENSE)); third-party notices in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The `8bit.dat` data file originates from UltraViewer and is not MIT-licensed.
+Unofficial open-source project, not affiliated with UltraViewer. MIT license; third-party notices in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md); the `8bit.dat` data file originates from UltraViewer and is not MIT-licensed.
