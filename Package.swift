@@ -9,6 +9,12 @@ let package = Package(
         .library(name: "UltraViewerProtocol", targets: ["UltraViewerProtocol"]),
         .executable(name: "MacViewer", targets: ["MacViewer"]),
     ],
+    dependencies: [
+        // Mode 2 (self-hosted mesh, 5.0): the verified mesh client core
+        // lives in its own package next to this one. Path dependency so
+        // the two trees evolve together until the mesh ships in a release.
+        .package(path: "mesh-client"),
+    ],
     targets: [
         .target(
             name: "CG722",
@@ -43,7 +49,9 @@ let package = Package(
         ),
         .target(name: "UltraViewerProtocol", dependencies: ["CZstd", "CG722"],
                 resources: [.copy("Resources/8bit.dat")]),
-        .executableTarget(name: "MacViewer", dependencies: ["UltraViewerProtocol"],
+        .executableTarget(name: "MacViewer",
+                          dependencies: ["UltraViewerProtocol",
+                                         .product(name: "MeshClient", package: "mesh-client")],
                           resources: [.process("Resources")]),
         .testTarget(name: "UltraViewerProtocolTests", dependencies: ["UltraViewerProtocol"]),
         .testTarget(name: "MacViewerTests", dependencies: ["MacViewer"]),

@@ -9,6 +9,9 @@ struct ConnectionView: View {
     @AppStorage("MacViewer.scrollSensitivity") private var scrollSensitivity = 1.0
     @ObservedObject var remoteCapture: RemoteCaptureController
     @ObservedObject var updater: UpdateChecker
+    @StateObject private var mesh = MeshSessionModel()
+    @AppStorage(AppMode.defaultsKey) private var appMode = AppMode.ultraViewer
+    @AppStorage(MeshDefaults.serverAddressKey) private var meshServerAddress = ""
     @State private var remoteDisplayScale: RemoteDisplayScale = .fit
     @AppStorage("MacViewer.imageQuality") private var remoteImageQuality: RemoteImageQuality = .quality
     @State private var showSession = false
@@ -25,7 +28,13 @@ struct ConnectionView: View {
         let _ = appLocale
         VStack(spacing: 0) {
             if showSession && model.isSessionActive { remoteSession }
-            else { appHeader; Divider(); dashboard }
+            else {
+                appHeader
+                Divider()
+                modeSwitchBar
+                Divider()
+                if appMode == .selfHosted { MeshModeView(mesh: mesh) } else { dashboard }
+            }
         }
         .background(Color(nsColor: .windowBackgroundColor))
         .sheet(isPresented: Binding(get: { hosting.pendingRequest != nil }, set: { if !$0 { hosting.decline() } })) {
@@ -54,6 +63,8 @@ struct ConnectionView: View {
                 Text("End this incoming session and connect to the same Windows computer? Control will stay off until you enable it.")
             }
         .onDisappear { remoteCapture.endSession(); model.disconnect(); hosting.stop() }
+        .onDisappear { Task { await mesh.stop() } }
+        .onChange(of: meshServerAddress) { _ in Task { await mesh.serverChanged() } }
         .onChange(of: hosting.identifier) { id in if id == nil { revealPassword = false } }
         .onChange(of: model.phase) { phase in
             if phase == .connecting || phase == .connected { showSession = true }
@@ -106,7 +117,7 @@ struct ConnectionView: View {
                 .frame(width: 28, height: 28)
                 .background(.blue.gradient, in: RoundedRectangle(cornerRadius: 8))
             VStack(alignment: .leading, spacing: 2) {
-                Text("MacViewer").font(.system(size: 14, weight: .semibold))
+                Text("MacViewer Ventura").font(.system(size: 14, weight: .semibold))
                 Text("Works with UltraViewer on Windows").font(.system(size: 10)).foregroundStyle(.secondary)
             }
             Spacer()
@@ -143,6 +154,28 @@ struct ConnectionView: View {
         }
         .padding(.horizontal, 16).padding(.vertical, 8)
         .fixedSize(horizontal: false, vertical: true)
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    /// The 5.0 mode switch (UI spec §4): a segmented control directly
+    /// under the title bar, spanning the content width. While a Mode 1
+    /// session is on screen the switch is not shown at all — the remote
+    /// session replaces this whole area, which locks the mode for the
+    /// session's lifetime.
+    private var modeSwitchBar: some View {
+        Picker("Mode", selection: $appMode) {
+            ForEach(AppMode.allCases) { mode in
+                Label {
+                    Text(LocalizedStringKey(mode.title))
+                } icon: {
+                    Image(systemName: mode.symbol)
+                }
+                .tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .padding(.horizontal, 16).padding(.vertical, 8)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 

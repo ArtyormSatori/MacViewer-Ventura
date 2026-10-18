@@ -9,10 +9,12 @@ struct MacViewerApp: App {
     @StateObject private var updater = UpdateChecker()
     @NSApplicationDelegateAdaptor(MacViewerAppDelegate.self) private var applicationDelegate
     @AppStorage(AppLanguage.defaultsKey) private var language = AppLanguage.system.rawValue
+    @AppStorage(AppAppearance.defaultsKey) private var appearance = AppAppearance.system.rawValue
 
     var body: some Scene {
-        WindowGroup("MacViewer") {
+        WindowGroup("MacViewer Ventura") {
             ConnectionView(model: model, hosting: hosting, remoteCapture: capture, updater: updater)
+                .preferredColorScheme((AppAppearance(rawValue: appearance) ?? .system).colorScheme)
                 .frame(minWidth: 960, minHeight: 680)
                 .onAppear {
                     applicationDelegate.capture = capture
@@ -40,7 +42,9 @@ struct MacViewerApp: App {
         }
 
         Settings {
-            MacViewerSettings(model: model, hosting: hosting, updater: updater).appLanguage()
+            MacViewerSettings(model: model, hosting: hosting, updater: updater)
+                .appLanguage()
+                .preferredColorScheme((AppAppearance(rawValue: appearance) ?? .system).colorScheme)
         }
     }
 }
@@ -63,6 +67,8 @@ struct MacViewerSettings: View {
     @AppStorage(AppLanguage.defaultsKey) private var language = AppLanguage.system.rawValue
     @AppStorage(UpdateChecker.automaticKey) private var checkForUpdates = true
     @AppStorage(SessionToolsModel.shareClipboardKey) private var shareClipboard = true
+    @AppStorage(AppAppearance.defaultsKey) private var appearance = AppAppearance.system.rawValue
+    @AppStorage(MeshDefaults.serverAddressKey) private var meshServerAddress = ""
 
     var body: some View {
         Form {
@@ -73,6 +79,23 @@ struct MacViewerSettings: View {
                     }
                 }
                 Text("Language changes apply immediately.").font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Appearance") {
+                Picker("Appearance", selection: $appearance) {
+                    ForEach(AppAppearance.allCases) { option in
+                        Text(LocalizedStringKey(option.title)).tag(option.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+                Text("System follows your Mac's appearance. Applies to the whole app, in both modes.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Self-hosted") {
+                TextField("Server address", text: $meshServerAddress,
+                          prompt: Text(MeshDefaults.serverURL.absoluteString))
+                    .textFieldStyle(.roundedBorder)
+                Text("Leave empty to use the default server. Changes apply the next time Mode 2 connects.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("History") {
                 Toggle("Remember successfully connected partner IDs", isOn: $rememberPartners)
