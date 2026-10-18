@@ -145,6 +145,8 @@ public actor UltraViewerRelaySession {
     private var correlation: Int32 = 0
     private var remoteViewOnly = false
     private var clipboardAllowed = false
+    private var peerVersion = ""
+    private var consecutiveHeartbeatFailures = 0
     private var audioDecoder: G722Decoder?
     private var audioEnabled = false
     private var relayPingStarted: UInt64?
@@ -264,7 +266,7 @@ public actor UltraViewerRelaySession {
 
     public func sendClipboard(_ text: String) async throws {
         guard phase == .active, clipboardAllowed else { throw Failure.notConnected }
-        let message = try ClipboardProtocol.viewerToHost(text)
+        let message = try ClipboardProtocol.viewerToHost(text, hostVersion: peerVersion)
         try await sendToPeer(message.payload, formatFlag: message.formatFlag)
         diagnostics.clipboardMessagesSent += 1
     }
@@ -716,6 +718,7 @@ public actor UltraViewerRelaySession {
             if geometryChanged, parts.count > 13, parts[13].isEmpty { throw Failure.malformedInitialization }
             let version = initialization.targetVersionBytes.map { String(decoding: $0, as: UTF8.self) } ?? ""
             guard Self.version(version, atLeast: [6, 0, 0]) else { throw Failure.unsupportedVersion }
+            peerVersion = version
             if geometryChanged {
                 let fresh = try ModernScreenRenderer(width: initialization.width, height: initialization.height,
                     tileSize: initialization.tileSize, displayColors: 2,
@@ -775,10 +778,13 @@ public actor UltraViewerRelaySession {
                 try emit(.frame(bitmap))
                 // Backpressure follows successful decoding, so a slow client
                 // cannot acknowledge a growing queue of stale screen updates.
-                try await sendToPeer(Data("18".utf8))
+                // A lost ACK is recoverable — the next frame re-syncs — and
+                // must not kill the session; a dead socket still surfaces
+                // through the read loop.
+                try? await sendToPeer(Data("18".utf8))
             } catch let error as ModernScreenMessageError {
                 diagnostics.lastScreenFailure = String(describing: error)
-                try await sendToPeer(Data("18".utf8))
+                try? await sendToPeer(Data("18".utf8))
                 // A malformed drawing mission must not immediately tear down an
                 // authenticated connection. A new full initialization resets the
                 // decoder and tile cache together; never continue a damaged cache.
@@ -858,8 +864,13 @@ public actor UltraViewerRelaySession {
                 try await transport.send(RelayKeepalive.relayEnvelope)
                 guard token == generation else { return }
                 diagnostics.relayKeepalivesSent += 1
+                consecutiveHeartbeatFailures = 0
             } catch {
-                await relayEnded(error, token: token)
+                // A single lost keepalive must not tear down a healthy
+                // session — residential links drop individual sends. Only
+                // sustained failure means the relay path is really gone.
+                consecutiveHeartbeatFailures += 1
+                if consecutiveHeartbeatFailures >= 3 { await relayEnded(error, token: token) }
             }
         }
         guard token == generation, phase == .active else { return }
@@ -867,6 +878,7 @@ public actor UltraViewerRelaySession {
             peerPingStarted = DispatchTime.now().uptimeNanoseconds
             try await sendToPeer(Data("20".utf8))
             guard token == generation, phase == .active else { return }
+            consecutiveHeartbeatFailures = 0
             if pingCommandSocket {
                 // frmMain.tmPingServer: encrypted ASCII2, sixty-second interval.
                 try await commandTransport?.send(RelayKeepalive.commandEnvelope())
@@ -877,7 +889,10 @@ public actor UltraViewerRelaySession {
         catch {
             guard token == generation else { return }
             if let id = directState.selected { await directCandidateEnded(id, token: token) }
-            else { await finish(error) }
+            else {
+                consecutiveHeartbeatFailures += 1
+                if consecutiveHeartbeatFailures >= 3 { await finish(error) }
+            }
         }
     }
 
@@ -920,6 +935,8 @@ public actor UltraViewerRelaySession {
         diagnostics.lanDirectActive = false
         password = ""; targetID = ""; connectionHash = ""
         clipboardAllowed = false
+        peerVersion = ""
+        consecutiveHeartbeatFailures = 0
         audioEnabled = false; audioDecoder = nil
         relayPingStarted = nil; peerPingStarted = nil
         renderer = nil; configuration = nil; peerInfo = nil; registrationReply = nil

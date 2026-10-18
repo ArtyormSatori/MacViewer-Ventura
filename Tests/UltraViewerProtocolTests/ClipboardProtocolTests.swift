@@ -109,3 +109,23 @@ private func clipboardRawZstdFixture(_ bytes: Data) -> Data {
     let host = try ClipboardProtocol.hostToViewer("")
     #expect(try ClipboardProtocol.decodeHostToViewer(parts: MultipartPayload.decode(host)) == "")
 }
+
+@Test func clipboardEncodingFollowsTheHostVersionBranch() throws {
+    let modern = try ClipboardProtocol.viewerToHost("hello", hostVersion: "6.6.133")
+    #expect(!modern.formatFlag)
+    #expect(modern.payload.starts(with: Data("33|||".utf8)))
+    #expect(try ClipboardProtocol.decodeViewerToHost(modern.payload, formatFlag: modern.formatFlag) == "hello")
+
+    let legacy = try ClipboardProtocol.viewerToHost("hello", hostVersion: "6.0.0")
+    #expect(legacy.formatFlag)
+    #expect(try ClipboardProtocol.decodeViewerToHost(legacy.payload, formatFlag: legacy.formatFlag) == "hello")
+
+    // An unknown version takes the legacy path, like the binary-keyboard branch.
+    let unknown = try ClipboardProtocol.viewerToHost("hello", hostVersion: "")
+    #expect(unknown.formatFlag)
+
+    // Text the legacy form cannot carry falls back to the modern form.
+    let ambiguous = try ClipboardProtocol.viewerToHost("a|||b", hostVersion: "6.0.0")
+    #expect(!ambiguous.formatFlag)
+    #expect(try ClipboardProtocol.decodeViewerToHost(ambiguous.payload, formatFlag: ambiguous.formatFlag) == "a|||b")
+}

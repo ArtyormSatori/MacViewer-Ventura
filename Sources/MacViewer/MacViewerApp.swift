@@ -55,6 +55,7 @@ struct MacViewerSettings: View {
     @AppStorage(MacHostingModel.preventSleepKey) private var preventSleep = true
     @State private var loginItemEnabled = MacLoginItem.isEnabled
     @AppStorage(KeyboardInputMode.defaultsKey) private var keyboardMode = KeyboardInputMode.keycode.rawValue
+    @AppStorage(CommandKeyMapping.defaultsKey) private var commandKey = CommandKeyMapping.control.rawValue
     @State private var loginItemError: String?
     @AppStorage(ConnectionModel.rememberPartnersKey) private var rememberPartners = true
     @AppStorage("MacViewer.smoothScreen") private var smoothScreen = true
@@ -118,6 +119,13 @@ struct MacViewerSettings: View {
                         Text(mode.title).tag(mode.rawValue)
                     }
                 }
+                Picker("Command (\u{2318}) key sends", selection: $commandKey) {
+                    ForEach(CommandKeyMapping.allCases, id: \.rawValue) { mapping in
+                        Text(mapping.title).tag(mapping.rawValue)
+                    }
+                }
+                Text("Control makes \u{2318}C / \u{2318}V / \u{2318}X work as Ctrl+C / Ctrl+V / Ctrl+X on the Windows computer; Windows key sends \u{2318} as the Windows key instead. Applies to new sessions.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Text("Applies to new sessions. US keycode matches the remote layout directly. VNI passthrough sends raw keys so a VNI input method on the remote computer composes the tones — keep this Mac's input source on ABC/US while using it. Unicode text sends characters already composed on this Mac, for remotes without a Vietnamese IME.")
                     .font(.caption).foregroundStyle(.secondary)
             }

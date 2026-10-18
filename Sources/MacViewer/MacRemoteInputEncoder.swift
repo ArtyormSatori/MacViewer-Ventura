@@ -35,12 +35,35 @@ enum KeyboardInputMode: String, CaseIterable {
     }
 }
 
+/// What the Mac's Command key should mean on the Windows side. Windows
+/// shortcuts (Ctrl+C / Ctrl+V / Ctrl+X …) are what a Mac user reaching for
+/// ⌘ expects, so `control` is the product default; `windows` keeps the
+/// recovered behaviour of sending ⌘ as the Windows key.
+enum CommandKeyMapping: String, CaseIterable {
+    case control
+    case windows
+
+    static let defaultsKey = "MacViewer.commandKey"
+
+    static var current: CommandKeyMapping {
+        CommandKeyMapping(rawValue: UserDefaults.standard.string(forKey: defaultsKey) ?? "") ?? .control
+    }
+
+    var title: String {
+        switch self {
+        case .control: "Control (Windows shortcuts)"
+        case .windows: "Windows key"
+        }
+    }
+}
+
 /// Session-local input state. The adapter must check authentication/input permission
 /// and send the returned application payloads in order, with the false format flag.
 /// See docs/mac-remote-input.md for the US mapping and character limitations.
 struct MacRemoteInputEncoder {
     let supportsBinaryKeyboard: Bool
     let mode: KeyboardInputMode
+    let commandAsControl: Bool
 
     private var keys: [UInt16: HeldKey] = [:]
     private var keyOrder: [UInt16] = []
@@ -52,12 +75,15 @@ struct MacRemoteInputEncoder {
 
     /// Supply the negotiated capability corresponding to the desktop's
     /// isTargetVersionGreaterThan6213 branch; this encoder does not infer it.
-    init(supportsBinaryKeyboard: Bool, mode: KeyboardInputMode = .keycode) {
+    init(supportsBinaryKeyboard: Bool, mode: KeyboardInputMode = .keycode,
+         commandAsControl: Bool = false) {
         self.supportsBinaryKeyboard = supportsBinaryKeyboard
         self.mode = mode
+        self.commandAsControl = commandAsControl
     }
 
     mutating func encode(_ input: RemoteInput) -> [Data] {
+        let input = commandAsControl ? Self.translatingCommandToControl(input) : input
         var output: [Data] = []
         switch input {
         case let .pointerMoved(x, y):
@@ -139,6 +165,26 @@ struct MacRemoteInputEncoder {
             wheelRemainder = 0
         }
         return output
+    }
+
+    /// Rewrites Command as Control at the input boundary: the physical
+    /// Command keys take the Control keys' codes and the modifier flag
+    /// follows, so every downstream path (synthetic modifiers, held-key
+    /// tracking, release) treats ⌘ exactly like Control.
+    private static func translatingCommandToControl(_ input: RemoteInput) -> RemoteInput {
+        switch input {
+        case let .key(code, characters, pressed, flags):
+            var flags = flags
+            if flags.contains(.command) { flags.remove(.command); flags.insert(.control) }
+            let code: UInt16 = code == 0x37 ? 0x3b : code == 0x36 ? 0x3e : code
+            return .key(keyCode: code, characters: characters, pressed: pressed, modifiers: flags)
+        case let .modifiers(flags):
+            var flags = flags
+            if flags.contains(.command) { flags.remove(.command); flags.insert(.control) }
+            return .modifiers(flags)
+        default:
+            return input
+        }
     }
 
     private mutating func move(to point: Point, force: Bool = false, into output: inout [Data]) {

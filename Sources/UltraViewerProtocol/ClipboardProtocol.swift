@@ -55,6 +55,26 @@ public enum ClipboardProtocol {
         }
     }
 
+    /// Controller→host with the encoding the original viewer picks for the
+    /// host's announced version: modern command33 at or beyond the 6.2.13
+    /// branch, legacy command5 below it. Text the legacy form cannot carry
+    /// (an embedded delimiter) falls back to the modern form.
+    public static func viewerToHost(_ text: String, hostVersion: String) throws -> WireMessage {
+        guard !version(hostVersion, atLeast: [6, 2, 13]) else { return try viewerToHost(text) }
+        if let legacy = try? viewerToHost(text, encoding: .legacyUnicode) { return legacy }
+        return try viewerToHost(text)
+    }
+
+    /// Same comparison the relay session applies to the binary-keyboard
+    /// branch: exactly three numeric fields, lexicographic.
+    private static func version(_ text: String, atLeast required: [Int]) -> Bool {
+        let fields = text.split(separator: ".", omittingEmptySubsequences: false)
+        guard fields.count == 3 else { return false }
+        let values = fields.compactMap { Int($0) }
+        guard values.count == 3, values.allSatisfy({ $0 >= 0 }) else { return false }
+        return !values.lexicographicallyPrecedes(required)
+    }
+
     /// Decode the original viewer wire bytes, after relay/direct framing.
     public static func decodeViewerToHost(_ payload: Data, formatFlag: Bool) throws -> String {
         try checkPayload(payload.count)

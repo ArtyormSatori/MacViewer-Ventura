@@ -59,7 +59,8 @@ final class NativeUltraViewerAdapter: MacViewerSessionAdapter {
                         self.allowsInput = info.allowsRemoteInput
                         if self.encoder == nil {
                             self.encoder = MacRemoteInputEncoder(supportsBinaryKeyboard: info.supportsBinaryKeyboard,
-                                                                 mode: KeyboardInputMode.current)
+                                                                 mode: KeyboardInputMode.current,
+                                                                 commandAsControl: CommandKeyMapping.current == .control)
                         }
                         pair.continuation.yield(.connected(RemoteSessionInfo(partnerID: partnerID,
                             displayName: info.displayName, allowsRemoteInput: info.allowsRemoteInput,

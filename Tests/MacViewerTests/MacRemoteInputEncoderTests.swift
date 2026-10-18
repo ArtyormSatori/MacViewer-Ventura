@@ -145,4 +145,32 @@ struct MacRemoteInputEncoderTests {
             == ["8|||512|||4|||1|||2"])
         #expect(legacy.encode(.releaseAll).isEmpty)
     }
+
+    @Test("Command acts as Control for Windows shortcuts when the mapping is enabled")
+    func commandAsControl() {
+        var encoder = MacRemoteInputEncoder(supportsBinaryKeyboard: true, commandAsControl: true)
+        // Modifier-state events translate too: Cmd held -> synthetic left Control.
+        #expect(encoder.encode(.modifiers([.command])) == [
+            Data([30, 124, 124, 124, 1, 0xa2, 0x1d, 0, 0, 0, 0])])
+        // Cmd+C is Ctrl+C on the wire (physical VK path, no character hint).
+        #expect(encoder.encode(.key(keyCode: 0x08, characters: "c", pressed: true, modifiers: [.command])) == [
+            Data([30, 124, 124, 124, 1, 0x43, 0x2e, 0, 0, 0, 0])])
+        #expect(encoder.encode(.key(keyCode: 0x08, characters: "c", pressed: false, modifiers: [.command])) == [
+            Data([30, 124, 124, 124, 2, 0x43, 0x2e, 0, 0, 0, 0])])
+        #expect(encoder.encode(.modifiers([])) == [
+            Data([30, 124, 124, 124, 2, 0xa2, 0x1d, 0, 0, 0, 0])])
+        // The physical Command key itself also becomes Control.
+        var physical = MacRemoteInputEncoder(supportsBinaryKeyboard: true, commandAsControl: true)
+        #expect(physical.encode(.key(keyCode: 0x37, characters: nil, pressed: true, modifiers: [.command])) == [
+            Data([30, 124, 124, 124, 1, 0xa2, 0x1d, 0, 0, 0, 0])])
+        #expect(physical.encode(.key(keyCode: 0x37, characters: nil, pressed: false, modifiers: [])) == [
+            Data([30, 124, 124, 124, 2, 0xa2, 0x1d, 0, 0, 0, 0])])
+    }
+
+    @Test("Command stays the Windows key when the mapping is off")
+    func commandAsWindowsKeyByDefault() {
+        var encoder = MacRemoteInputEncoder(supportsBinaryKeyboard: true)
+        #expect(encoder.encode(.modifiers([.command])) == [
+            Data([30, 124, 124, 124, 1, 0x5b, 0x5b, 0xe0, 0, 0, 0])])
+    }
 }
