@@ -70,6 +70,8 @@ public actor UltraViewerRelaySession {
         public var commandKeepalivesSent = 0
         public var relayPongsReceived = 0
         public var screenRefreshes = 0
+        /// Auto-reconnect episodes started after a mid-session network death.
+        public var reconnects = 0
         public var lastScreenFailure: String?
         public var chatMessagesSent = 0
         public var chatMessagesReceived = 0
@@ -146,13 +148,46 @@ public actor UltraViewerRelaySession {
     private var remoteViewOnly = false
     private var clipboardAllowed = false
     private var peerVersion = ""
-    private var consecutiveHeartbeatFailures = 0
     private var audioDecoder: G722Decoder?
     private var audioEnabled = false
     private var relayPingStarted: UInt64?
     private var peerPingStarted: UInt64?
-    private var heartbeatTicks = 0
     private var capturedCommands: Set<UInt8> = []
+    // Disconnect resilience (4.1): per-leg liveness replaces the single
+    // shared heartbeat-failure counter, a reply watchdog catches silently
+    // dead legs, and network-class deaths of an established session are
+    // retried through a bounded reconnect episode instead of ending it.
+    private var relayLeg = RelayLegLiveness()
+    private var peerLeg = RelayLegLiveness()
+    private var commandLeg = RelayLegLiveness()
+    /// Set when the host itself ends the session (commands 27/41/54), so a
+    /// resulting `Failure.closed` is not mistaken for a network death.
+    private var hostEndedSession = false
+    private var zstdTolerance = ScreenDecodeTolerance()
+    private var reconnectInProgress = false
+    private var reconnectTask: Task<Void, Never>?
+    private var attemptFailed = false
+    private var attemptError: (any Swift.Error)?
+    /// Identifies the current connection attempt's consume loops. Teardown
+    /// clears it, so a dying loop's late failure report can never tear
+    /// down (or falsely fail) the attempt that replaced it.
+    private var activeLoopID: UUID?
+    /// True while `teardownConnection` runs; failure reports arriving in
+    /// that window come from the connection being dismantled and are
+    /// ignored by `connectionFailed`.
+    private var tearingDown = false
+    /// The next partner lookup is a reconnect of an established session.
+    private var reconnectLookup = false
+    /// A reconnect episode is waiting for its first successful
+    /// initialization, which must surface as `.accepted` (full app-layer
+    /// resume) rather than `.screenChanged`.
+    private var resumePending = false
+    /// Inbound-silence window for the reply watchdog: keepalive pings go
+    /// out every 10 s and replies normally land in well under a second, so
+    /// 35 s of total inbound silence on the peer path — three missed
+    /// cycles plus slack — means the leg is dead even if sends still
+    /// appear to succeed locally.
+    private static let peerStaleWindowNanoseconds: UInt64 = 35_000_000_000
     public private(set) var diagnostics = Diagnostics()
 
     public init() {}
@@ -182,15 +217,31 @@ public actor UltraViewerRelaySession {
         self.relayInitializationSuspended = false
         self.pendingRelayInitialization = nil
         self.relayPingStarted = nil; self.peerPingStarted = nil
-        self.heartbeatTicks = 0
         self.capturedCommands = []
+        self.relayLeg = RelayLegLiveness()
+        self.peerLeg = RelayLegLiveness()
+        self.commandLeg = RelayLegLiveness()
+        self.hostEndedSession = false
+        self.zstdTolerance = ScreenDecodeTolerance()
+        self.reconnectInProgress = false
+        self.attemptFailed = false
+        self.attemptError = nil
+        self.reconnectLookup = false
+        self.resumePending = false
         let token = UUID()
         generation = token
         phase = .registering
-        let pair = AsyncThrowingStream<Event, any Swift.Error>.makeStream(bufferingPolicy: .bufferingOldest(8))
+        // Unbounded: a slow consumer can no longer kill the session by
+        // filling a fixed buffer (the pre-4.1 emit() turned one dropped
+        // status event into a fatal consumerTooSlow). Supersedable screen
+        // frames are shed at the transport layer instead, where the drop
+        // is counted; event ordering here stays a single strict FIFO.
+        let pair = AsyncThrowingStream<Event, any Swift.Error>.makeStream(bufferingPolicy: .unbounded)
         events = pair.continuation
         pair.continuation.onTermination = { [weak self] _ in Task { await self?.close(ifGeneration: token) } }
-        commandTask = Task { [weak self] in await self?.begin(configuration, token: token) }
+        let loop = UUID()
+        activeLoopID = loop
+        commandTask = Task { [weak self] in await self?.begin(configuration, token: token, loop: loop) }
         return pair.stream
     }
 
@@ -276,7 +327,7 @@ public actor UltraViewerRelaySession {
         await finish(nil)
     }
 
-    private func begin(_ config: Configuration, token: UUID) async {
+    private func begin(_ config: Configuration, token: UUID, loop: UUID) async {
         guard generation == token, phase == .registering else { return }
         do {
             try emit(.status("Registering this Mac…"))
@@ -292,15 +343,17 @@ public actor UltraViewerRelaySession {
             for try await frame in stream {
                 try Task.checkCancellation()
                 guard generation == token, phase != .closed else { return }
-                try await consumeCommand(frame, token: token)
+                try await consumeCommand(frame, token: token, loop: loop)
             }
-            if generation == token, phase != .closed { await finish(Failure.closed) }
+            if generation == token, phase != .closed {
+                await connectionFailed(Failure.closed, token: token, loop: loop)
+            }
         } catch {
-            if generation == token { await finish(error) }
+            if generation == token { await connectionFailed(error, token: token, loop: loop) }
         }
     }
 
-    private func consumeCommand(_ bytes: Data, token: UUID) async throws {
+    private func consumeCommand(_ bytes: Data, token: UUID, loop: UUID) async throws {
         guard case let .system(payload) = try RelayEnvelope.decode(bytes),
               let config = configuration else { return }
         if phase == .registering, payload.starts(with: Data("3:".utf8)) {
@@ -316,7 +369,7 @@ public actor UltraViewerRelaySession {
                 licenseContext: config.registration.licenseContext1,
                 additionalLicenseContext: config.registration.licenseContext2,
                 localID: reply.assignedIDText, localPassword: config.registration.password,
-                targetSessionID: -1, correlationNumber: correlation, isReconnect: false,
+                targetSessionID: -1, correlationNumber: correlation, isReconnect: reconnectLookup,
                 referralIDText: "0", paymentTypeText: "0",
                 dateTimeOffsetMinutes: Int32(TimeZone.current.secondsFromGMT() / 60),
                 objectDictionaryCount: 1, fixedPingList: "", directDetails: directDetails)
@@ -339,7 +392,7 @@ public actor UltraViewerRelaySession {
             deadline?.cancel()
             await configureLANDirect(info, token: token)
             guard generation == token, phase != .closed else { return }
-            peerTask = Task { [weak self] in await self?.beginPeer(info, config: config, token: token) }
+            peerTask = Task { [weak self] in await self?.beginPeer(info, config: config, token: token, loop: loop) }
         }
     }
 
@@ -435,7 +488,8 @@ public actor UltraViewerRelaySession {
                 guard token == generation else { return }
                 if directState.selected == id, let failure = error as? Failure {
                     switch failure {
-                    case .closed, .partnerBlocked, .wrongPassword: await finish(error)
+                    case .closed, .partnerBlocked, .wrongPassword:
+                        await connectionFailed(error, token: token, loop: nil)
                     default: await directCandidateEnded(id, token: token)
                     }
                 } else { await directCandidateEnded(id, token: token) }
@@ -505,16 +559,16 @@ public actor UltraViewerRelaySession {
         if wasSelected {
             diagnostics.lanDirectActive = false
             diagnostics.lanDirectFallbacks += 1
-            guard relayReady else { await finish(Failure.closed); return }
+            guard relayReady else { await connectionFailed(Failure.closed, token: token, loop: nil); return }
             // A failed selected direct channel needs a fresh relay Login/init,
             // not plaintext retry or reuse of a partial direct frame cache.
             do {
                 try emit(.status("Restoring the Windows relay connection…"))
                 armDeadline(token)
                 try await login(controlMode: -1, clearControlMode: true, token: token, source: .relay)
-            } catch { if token == generation { await finish(error) } }
+            } catch { if token == generation { await connectionFailed(error, token: token, loop: nil) } }
         } else {
-            if !relayReady, relayFailed { await finish(Failure.closed); return }
+            if !relayReady, relayFailed { await connectionFailed(Failure.closed, token: token, loop: nil); return }
             // If direct Login retargeted the native host, restore its relay
             // route without throwing away a still healthy relay renderer.
             if wasLogin, relayReady {
@@ -522,7 +576,7 @@ public actor UltraViewerRelaySession {
                     if phase == .login { armDeadline(token) }
                     try await login(controlMode: diagnostics.peerAccepted ? -1 : 0,
                         clearControlMode: false, token: token, source: .relay)
-                } catch { if token == generation { await relayEnded(error, token: token) } }
+                } catch { if token == generation { await relayEnded(error, token: token, loop: nil) } }
             }
             guard token == generation, phase != .closed else { return }
             beginDirectLoginIfPossible(token: token)
@@ -539,7 +593,7 @@ public actor UltraViewerRelaySession {
         guard token == generation else { return }
     }
 
-    private func relayEnded(_ error: any Swift.Error, token: UUID) async {
+    private func relayEnded(_ error: any Swift.Error, token: UUID, loop: UUID?) async {
         guard token == generation, phase != .closed else { return }
         relayReady = false
         relayFailed = true
@@ -549,12 +603,15 @@ public actor UltraViewerRelaySession {
         await transport?.close()
         guard token == generation, phase != .closed else { return }
         if directState.selected != nil || directState.loginCandidate != nil { return }
-        await finish(error)
+        await connectionFailed(error, token: token, loop: loop)
     }
 
-    private func beginPeer(_ info: PeerLookup.PeerInfo, config: Configuration, token: UUID) async {
+    private func beginPeer(_ info: PeerLookup.PeerInfo, config: Configuration, token: UUID, loop: UUID) async {
         guard generation == token, phase != .closed else { return }
-        let transport = FramedTCPTransport()
+        // The peer leg carries supersedable screen frames: when the
+        // consumer falls behind, shed frames (counted on the transport)
+        // instead of tearing down the session. Corruption stays fatal.
+        let transport = FramedTCPTransport(frameDeliveryPolicy: .dropOnConsumerTooSlow)
         peerTransport = transport
         do {
             try emit(.status("Connecting to the Windows computer…"))
@@ -576,9 +633,9 @@ public actor UltraViewerRelaySession {
                 guard generation == token, phase != .closed else { return }
                 try await consumePeer(frame, token: token)
             }
-            if generation == token, phase != .closed { await relayEnded(Failure.closed, token: token) }
+            if generation == token, phase != .closed { await relayEnded(Failure.closed, token: token, loop: loop) }
         } catch {
-            if generation == token { await relayEnded(error, token: token) }
+            if generation == token { await relayEnded(error, token: token, loop: loop) }
         }
     }
 
@@ -615,6 +672,9 @@ public actor UltraViewerRelaySession {
     }
 
     private func consumePeer(_ bytes: Data, token: UUID) async throws {
+        // Any bytes on the relay leg — pong, forwarded host traffic — prove
+        // the leg is alive for the reply watchdog.
+        relayLeg.noteInbound(at: DispatchTime.now().uptimeNanoseconds)
         let envelope = try RelayEnvelope.decode(bytes)
         if case let .system(payload) = envelope {
             if payload == Data("pong".utf8) {
@@ -661,6 +721,9 @@ public actor UltraViewerRelaySession {
                                     source: PeerSource, relayAddress: RelayIPv4Address? = nil,
                                     relayPort: UInt16? = nil, token: UUID) async throws {
         guard token == generation, phase != .closed else { return }
+        // Application traffic on whichever channel is selected (relay or
+        // LAN direct) is the peer path's liveness signal.
+        peerLeg.noteInbound(at: DispatchTime.now().uptimeNanoseconds)
         let parts: [Data]
         if let suppliedParts { parts = suppliedParts }
         else { parts = try MultipartPayload.decode(payload) }
@@ -673,7 +736,10 @@ public actor UltraViewerRelaySession {
                 // a complete ordinary Login initialization. Ignore all screen,
                 // permission, chat and input traffic until that point.
                 guard command == 0 else {
-                    if [22, 27, 39, 41, 54].contains(command) { throw Failure.closed }
+                    if [22, 27, 39, 41, 54].contains(command) {
+                        if [27, 41, 54].contains(command) { hostEndedSession = true }
+                        throw Failure.closed
+                    }
                     return
                 }
                 guard parts.count >= 11 else { throw Failure.malformedInitialization }
@@ -738,6 +804,7 @@ public actor UltraViewerRelaySession {
             }
             phase = .active
             deadline?.cancel()
+            zstdTolerance.noteSuccess()
             let previouslyAccepted = diagnostics.peerAccepted
             diagnostics.peerAccepted = true
             if heartbeat == nil {
@@ -758,8 +825,16 @@ public actor UltraViewerRelaySession {
                 supportsBinaryKeyboard: Self.version(version, atLeast: [6, 2, 13]),
                 allowsRemoteInput: !remoteViewOnly,
                 monitors: (try? RemoteControlCommands.monitors(from: initialization.monitorInformationBytes ?? Data())) ?? [])
-            try emit(previouslyAccepted ? .screenChanged(peer) : .accepted(peer))
+            // A reconnect episode's first successful initialization must
+            // surface as a fresh `.accepted`, not `.screenChanged`: the app
+            // layer re-runs its full session setup (input, control posture,
+            // quality preset) on `.accepted`, and a resumed session needs
+            // exactly that. A plain screen refresh keeps `.screenChanged`.
+            let resumed = resumePending
+            resumePending = false
+            try emit(previouslyAccepted && !resumed ? .screenChanged(peer) : .accepted(peer))
             if upgradingID != nil { try emit(.status("Connected directly over the local network.")) }
+            else if resumed { try emit(.status("Reconnected to the Windows computer.")) }
             else if previouslyAccepted { try emit(.status("Windows screen refreshed.")) }
             if let upgradingID { await directTransport?.selectCandidate(upgradingID) }
             guard token == generation, phase == .active else { return }
@@ -775,6 +850,7 @@ public actor UltraViewerRelaySession {
                 diagnostics.decodeNanoseconds += elapsed
                 diagnostics.maximumDecodeNanoseconds = max(diagnostics.maximumDecodeNanoseconds, elapsed)
                 diagnostics.decodedFrames += 1
+                zstdTolerance.noteSuccess()
                 try emit(.frame(bitmap))
                 // Backpressure follows successful decoding, so a slow client
                 // cannot acknowledge a growing queue of stale screen updates.
@@ -789,6 +865,16 @@ public actor UltraViewerRelaySession {
                 // authenticated connection. A new full initialization resets the
                 // decoder and tile cache together; never continue a damaged cache.
                 guard diagnostics.screenRefreshes < 2 else { throw error }
+                try await refreshScreen()
+            } catch let error as ZstdScreenDecoder.Error {
+                // A corrupt zstd payload used to escape the typed catch
+                // above and kill the session on its first occurrence. Give
+                // it the same shape of tolerance: ACK, count it, refresh —
+                // and only fail after a bounded run of consecutive bad
+                // frames (a successful decode resets the budget).
+                diagnostics.lastScreenFailure = String(describing: error)
+                try? await sendToPeer(Data("18".utf8))
+                guard !zstdTolerance.noteFailure() else { throw error }
                 try await refreshScreen()
             }
         case 20:
@@ -812,7 +898,12 @@ public actor UltraViewerRelaySession {
                 armDeadline(token)
                 try await login(controlMode: -1, clearControlMode: true, token: token)
             }
-        case 27, 41, 54: throw Failure.closed
+        case 27, 41, 54:
+            // The host ended this session on purpose. The resulting
+            // Failure.closed must not be mistaken for a network death and
+            // "reconnected" against the host's explicit close.
+            hostEndedSession = true
+            throw Failure.closed
         case 39: throw Failure.partnerBlocked
         case 48:
             if phase == .active { try renderer?.setTileSize(parts: parts) }
@@ -852,63 +943,124 @@ public actor UltraViewerRelaySession {
         }
     }
 
+    /// One heartbeat tick: the reply watchdog first, then one keepalive
+    /// per leg, each in its own failure domain with its own counter and a
+    /// bounded send. A single lost keepalive still must not tear down a
+    /// healthy session — residential links drop individual sends — but
+    /// three failures in a row on one leg, a send that hangs past its
+    /// bound, or a full window with no inbound traffic at all each mean
+    /// the leg is dead, and `connectionFailed` then decides between a
+    /// reconnect episode and finishing.
     private func sendHeartbeat(_ token: UUID) async {
         guard token == generation, phase == .active else { return }
-        heartbeatTicks += 1
-        let pingCommandSocket = heartbeatTicks.isMultiple(of: 6)
-        // Preserve an available relay while direct is selected. A relay-only
-        // heartbeat failure must not tear down an authenticated direct stream.
+        let now = DispatchTime.now().uptimeNanoseconds
+
+        // Reply watchdog: pings leave every 10 s and their answers are
+        // inbound frames like any other, so a peer path with no inbound
+        // frame of any kind for a full 35 s window is dead — even though
+        // every send still "succeeds" locally. NAT reaping, a relay
+        // restart and Wi-Fi roaming all die this silent way; the old
+        // send-failure counter could never see it.
+        if peerLeg.isStale(at: now, window: Self.peerStaleWindowNanoseconds) {
+            await connectionFailed(Failure.timedOut, token: token, loop: nil)
+            return
+        }
+        // While a direct channel carries the session, the relay leg is a
+        // fallback. If it silently died, record that in state — a later
+        // direct failure then finishes honestly instead of restoring
+        // onto a corpse — but never disturb the healthy direct stream.
+        if directState.selected != nil, relayReady,
+           relayLeg.isStale(at: now, window: Self.peerStaleWindowNanoseconds) {
+            relayReady = false
+            relayFailed = true
+        }
+
+        // Preserve an available relay while direct is selected: a
+        // relay-only heartbeat failure must not tear down an authenticated
+        // direct stream (relayEnded marks the leg and returns there).
         if relayReady, let transport = peerTransport {
             do {
                 relayPingStarted = DispatchTime.now().uptimeNanoseconds
-                try await transport.send(RelayKeepalive.relayEnvelope)
+                try await sendWithTimeout { try await transport.send(RelayKeepalive.relayEnvelope) }
                 guard token == generation else { return }
+                relayLeg.noteSendSucceeded()
                 diagnostics.relayKeepalivesSent += 1
-                consecutiveHeartbeatFailures = 0
             } catch {
-                // A single lost keepalive must not tear down a healthy
-                // session — residential links drop individual sends. Only
-                // sustained failure means the relay path is really gone.
-                consecutiveHeartbeatFailures += 1
-                if consecutiveHeartbeatFailures >= 3 { await relayEnded(error, token: token) }
+                guard token == generation else { return }
+                if relayLeg.noteSendFailed() {
+                    await relayEnded(error, token: token, loop: nil)
+                    return
+                }
             }
         }
         guard token == generation, phase == .active else { return }
         do {
             peerPingStarted = DispatchTime.now().uptimeNanoseconds
-            try await sendToPeer(Data("20".utf8))
+            try await sendWithTimeout { try await self.sendToPeer(Data("20".utf8)) }
             guard token == generation, phase == .active else { return }
-            consecutiveHeartbeatFailures = 0
-            if pingCommandSocket {
-                // frmMain.tmPingServer: encrypted ASCII2, sixty-second interval.
-                try await commandTransport?.send(RelayKeepalive.commandEnvelope())
-                guard token == generation else { return }
-                diagnostics.commandKeepalivesSent += 1
-            }
-        }
-        catch {
+            peerLeg.noteSendSucceeded()
+        } catch {
             guard token == generation else { return }
-            if let id = directState.selected { await directCandidateEnded(id, token: token) }
-            else {
-                consecutiveHeartbeatFailures += 1
-                if consecutiveHeartbeatFailures >= 3 { await finish(error) }
+            if let id = directState.selected {
+                await directCandidateEnded(id, token: token)
+                return
+            }
+            if peerLeg.noteSendFailed() {
+                await connectionFailed(error, token: token, loop: nil)
+                return
             }
         }
+        guard token == generation, phase == .active else { return }
+        // The command leg now pings every tick in its own do/catch. The
+        // recovered native cadence was 60 s (frmMain.tmPingServer), which
+        // left a quiet leg at the mercy of NAT idle timeouts, and a failed
+        // peer "20" in the same tick used to skip the command ping too.
+        if let commandTransport {
+            do {
+                let envelope = try RelayKeepalive.commandEnvelope()
+                try await sendWithTimeout { try await commandTransport.send(envelope) }
+                guard token == generation else { return }
+                commandLeg.noteSendSucceeded()
+                diagnostics.commandKeepalivesSent += 1
+            } catch {
+                guard token == generation else { return }
+                if commandLeg.noteSendFailed() {
+                    await connectionFailed(error, token: token, loop: nil)
+                    return
+                }
+            }
+        }
+    }
+
+    /// A heartbeat send with a hard bound of one heartbeat period: an
+    /// NWConnection send parked on a half-open connection can otherwise
+    /// freeze the sequential heartbeat loop forever, leaving a zombie
+    /// session with no ticks and no failure counting. A timed-out send
+    /// surfaces as `Failure.timedOut`, so a leg that dies by timeouts
+    /// reports the honest cause if the reconnect episode is exhausted.
+    private func sendWithTimeout(_ operation: @escaping @Sendable () async throws -> Void) async throws {
+        do { try await SessionSendRace.run(timeout: .seconds(10), operation: operation) }
+        catch is SessionSendTimeout { throw Failure.timedOut }
     }
 
     private func expired(_ token: UUID) async {
         guard token == generation, phase != .closed, phase != .active else { return }
-        await finish(Failure.timedOut)
+        // During a first connect this finishes (nothing was ever accepted);
+        // inside a reconnect attempt it fails the attempt and the
+        // supervisor applies backoff.
+        await connectionFailed(Failure.timedOut, token: token, loop: nil)
     }
 
     private func emit(_ event: Event) throws {
+        // The event stream is unbounded (see `connect`), so this yield can
+        // never report `.dropped`: the pre-4.1 stream filled at eight
+        // buffered events and turned one dropped status event into a fatal
+        // consumerTooSlow that ended the session. Backpressure is shed at
+        // the transport layer instead, where supersedable frames are
+        // dropped and counted; everything emitted here keeps a single
+        // strict FIFO order, control events included.
         switch events?.yield(event) {
         case .terminated: throw CancellationError()
-        case .dropped:
-            switch event {
-            case .frame, .computerAudio, .cursor: break
-            default: throw Failure.consumerTooSlow
-            }
         default: break
         }
     }
@@ -936,7 +1088,15 @@ public actor UltraViewerRelaySession {
         password = ""; targetID = ""; connectionHash = ""
         clipboardAllowed = false
         peerVersion = ""
-        consecutiveHeartbeatFailures = 0
+        reconnectTask?.cancel(); reconnectTask = nil
+        reconnectInProgress = false
+        attemptFailed = false; attemptError = nil
+        activeLoopID = nil
+        reconnectLookup = false
+        resumePending = false
+        hostEndedSession = false
+        relayLeg = RelayLegLiveness(); peerLeg = RelayLegLiveness(); commandLeg = RelayLegLiveness()
+        zstdTolerance = ScreenDecodeTolerance()
         audioEnabled = false; audioDecoder = nil
         relayPingStarted = nil; peerPingStarted = nil
         renderer = nil; configuration = nil; peerInfo = nil; registrationReply = nil
@@ -946,6 +1106,138 @@ public actor UltraViewerRelaySession {
         await command?.close()
         await peer?.close()
         await direct?.close()
+    }
+
+    /// The single funnel for connection-class failures after `connect`:
+    /// heartbeat thresholds, the reply watchdog, transport stream ends and
+    /// expired deadlines all land here. A death of an *established* session
+    /// with a network-class cause starts a bounded reconnect episode; the
+    /// event stream is deliberately NOT finished, so the app layer keeps
+    /// its session and simply sees status updates plus a fresh `.accepted`
+    /// when the reconnect lands. Anything else — first-connect failures,
+    /// wrong password, partner-blocked, a host that ended the session
+    /// itself — finishes exactly as it always did.
+    private func connectionFailed(_ error: any Swift.Error, token: UUID, loop: UUID?) async {
+        guard token == generation, phase != .closed, !tearingDown else { return }
+        if let loop, loop != activeLoopID { return }
+        if reconnectInProgress {
+            // A reconnect attempt just failed; record it for the
+            // supervisor instead of finishing or recursing.
+            attemptFailed = true
+            attemptError = error
+            return
+        }
+        guard SessionReconnectPolicy.isEligibleForReconnect(error,
+                                                             hostEndedSession: hostEndedSession,
+                                                             wasAccepted: diagnostics.peerAccepted) else {
+            await finish(error)
+            return
+        }
+        reconnectInProgress = true
+        attemptFailed = false
+        attemptError = nil
+        reconnectLookup = true
+        resumePending = true
+        diagnostics.reconnects += 1
+        await teardownConnection()
+        guard token == generation, phase != .closed else { reconnectInProgress = false; return }
+        phase = .registering
+        try? emit(.status("Connection lost. Reconnecting…"))
+        reconnectTask = Task { [weak self] in await self?.superviseReconnect(token: token) }
+    }
+
+    /// Dismantles the current attempt's transports and per-connection
+    /// state while preserving everything a reconnect needs: the session
+    /// identity (`configuration`, target, password, `connectionHash`,
+    /// `correlation`), the diagnostics (whose `peerAccepted` marks that a
+    /// session was established), and the event stream itself. Task `.value`s
+    /// are deliberately never awaited here — `connectionFailed` can be
+    /// executing on one of those very tasks; the `tearingDown` flag plus
+    /// the loop-ID guard make their late reports harmless instead.
+    private func teardownConnection() async {
+        tearingDown = true
+        activeLoopID = nil
+        deadline?.cancel(); deadline = nil
+        heartbeat?.cancel(); heartbeat = nil
+        commandTask?.cancel(); commandTask = nil
+        peerTask?.cancel(); peerTask = nil
+        directTask?.cancel(); directTask = nil
+        directLoginTask?.cancel(); directLoginTask = nil
+        directDeadline?.cancel(); directDeadline = nil
+        directWindow?.cancel(); directWindow = nil
+        let command = commandTransport; commandTransport = nil
+        let peer = peerTransport; peerTransport = nil
+        let direct = directTransport; directTransport = nil
+        directState = LANDirectUpgradeState()
+        directPendingInitialization = nil
+        relayReady = false; relayFailed = false
+        relayInitializationSuspended = false; pendingRelayInitialization = nil
+        diagnostics.lanDirectActive = false
+        relayPingStarted = nil; peerPingStarted = nil
+        renderer = nil; peerInfo = nil; registrationReply = nil
+        targetAddress = nil; targetPort = nil
+        clipboardAllowed = false
+        peerVersion = ""
+        relayLeg = RelayLegLiveness(); peerLeg = RelayLegLiveness(); commandLeg = RelayLegLiveness()
+        zstdTolerance = ScreenDecodeTolerance()
+        hostEndedSession = false
+        await command?.close()
+        await peer?.close()
+        await direct?.close()
+        tearingDown = false
+    }
+
+    /// Drives one reconnect episode: re-run the normal connect flow (with
+    /// `isReconnect: true` in the lookup) for the same partner, with
+    /// bounded attempts and backoff. Success is the new attempt reaching
+    /// the initialization message, which re-emits `.accepted`; the app
+    /// layer treats that as a resumed session and re-sends its control
+    /// posture and quality preset. Exhaustion finishes with the last real
+    /// error so the user sees the true cause, not a synthetic one.
+    private func superviseReconnect(token: UUID) async {
+        let policy = SessionReconnectPolicy()
+        let started = DispatchTime.now().uptimeNanoseconds
+        var lastError: (any Swift.Error)? = attemptError
+        var attempt = 0
+        while token == generation, reconnectInProgress, phase != .closed {
+            guard let config = configuration else { break }
+            attempt += 1
+            attemptFailed = false
+            attemptError = nil
+            phase = .registering
+            let loop = UUID()
+            activeLoopID = loop
+            try? emit(.status("Reconnecting to the Windows computer… (attempt \(attempt))"))
+            commandTask = Task { [weak self] in await self?.begin(config, token: token, loop: loop) }
+            // Wait for this attempt to succeed, fail, or run out of window.
+            var windowExpired = false
+            while token == generation, reconnectInProgress, !attemptFailed, phase != .active {
+                if DispatchTime.now().uptimeNanoseconds - started > policy.totalWindowUptimeNanoseconds {
+                    windowExpired = true
+                    break
+                }
+                try? await Task.sleep(for: .milliseconds(200))
+            }
+            if !attemptFailed, !windowExpired, phase == .active, token == generation {
+                reconnectInProgress = false
+                reconnectTask = nil
+                return
+            }
+            if let attemptError { lastError = attemptError }
+            if windowExpired { lastError = lastError ?? Failure.timedOut }
+            guard token == generation, reconnectInProgress, phase != .closed else { return }
+            await teardownConnection()
+            guard token == generation, reconnectInProgress, phase != .closed else { return }
+            phase = .registering
+            let elapsed = Duration.nanoseconds(Int64(DispatchTime.now().uptimeNanoseconds - started))
+            guard policy.shouldContinue(afterAttempt: attempt, elapsed: elapsed),
+                  let delay = policy.delay(beforeAttempt: attempt + 1) else { break }
+            try? await Task.sleep(for: delay)
+        }
+        guard token == generation, phase != .closed else { return }
+        reconnectInProgress = false
+        reconnectTask = nil
+        await finish(lastError ?? Failure.timedOut)
     }
 
     private static func randomString(count: Int, alphabet: [Character]) -> String {

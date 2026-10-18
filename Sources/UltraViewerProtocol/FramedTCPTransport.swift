@@ -36,6 +36,18 @@ public actor FramedTCPTransport {
         case tls(serverName: String, certificateName: String? = nil)
     }
 
+    /// What happens when the frame consumer falls more than a buffer
+    /// behind the wire. The command stream keeps the strict policy: its
+    /// frames are small, rare, and control-critical, so a consumer that
+    /// cannot keep up is a genuine failure. The peer/data stream carries
+    /// supersedable screen frames — there, a frame the consumer never got
+    /// to is worthless anyway (a newer frame replaces it), so dropping is
+    /// the correct degradation and a fatal error is not.
+    public enum FrameDeliveryPolicy: Sendable {
+        case failOnConsumerTooSlow
+        case dropOnConsumerTooSlow
+    }
+
     private var connection: NWConnection?
     private var opening: CheckedContinuation<Void, any Swift.Error>?
     private var receiver: Task<Void, Never>?
@@ -45,12 +57,18 @@ public actor FramedTCPTransport {
     private var ready = false
     private let queue = DispatchQueue(label: "MacViewer.tcp")
     private let maximumPayloadLength: Int
+    private let frameDeliveryPolicy: FrameDeliveryPolicy
     /// Latest opened stream's HTTP status, retained after close for diagnostics.
     public private(set) var receivedHTTPStatusCode: Int?
+    /// Frames shed by the drop delivery policy because the consumer fell
+    /// behind. Always zero under the strict policy.
+    public private(set) var droppedFrames = 0
 
-    public init(maximumPayloadLength: Int = 16 * 1024 * 1024) {
+    public init(maximumPayloadLength: Int = 16 * 1024 * 1024,
+                frameDeliveryPolicy: FrameDeliveryPolicy = .failOnConsumerTooSlow) {
         precondition(maximumPayloadLength >= 0 && maximumPayloadLength <= Int(Int32.max))
         self.maximumPayloadLength = maximumPayloadLength
+        self.frameDeliveryPolicy = frameDeliveryPolicy
     }
 
     public func open(
@@ -96,6 +114,17 @@ public actor FramedTCPTransport {
         }
         if let tcp = parameters.defaultProtocolStack.transportProtocol as? NWProtocolTCP.Options {
             tcp.noDelay = true
+            // Both relay legs must not depend on application pings alone:
+            // the command leg is quiet for long stretches, and residential
+            // NAT/CGNAT mappings for idle TCP die in 60–300 s. Kernel
+            // keepalive probes (idle 30 s, then every 10 s, give up after
+            // 3) keep the mapping warm and surface a silently dead leg to
+            // the connection state handler in about a minute instead of
+            // whenever the retransmit timer eventually gives up.
+            tcp.enableKeepalive = true
+            tcp.keepaliveIdle = 30
+            tcp.keepaliveInterval = 10
+            tcp.keepaliveCount = 3
         }
         let token = UUID()
         identity = token
@@ -195,7 +224,18 @@ public actor FramedTCPTransport {
                 if expectsHTTPResponse { receivedHTTPStatusCode = preamble.responseStatusCode }
                 for frame in try decoder.append(bytes) {
                     switch frames?.yield(frame) {
-                    case .dropped: throw Error.consumerTooSlow
+                    case .dropped:
+                        // The stream buffers oldest-first, so a full buffer
+                        // drops the *newest* arrival. Under the strict policy
+                        // that stays fatal; under the drop policy the shed
+                        // frame is counted and the stream lives on — the
+                        // session resynchronises through its refresh path.
+                        // Genuine corruption (truncated/oversize frames) is
+                        // unaffected and stays fatal in `decoder.append`.
+                        switch frameDeliveryPolicy {
+                        case .failOnConsumerTooSlow: throw Error.consumerTooSlow
+                        case .dropOnConsumerTooSlow: droppedFrames += 1
+                        }
                     case .terminated: finish(nil); return
                     default: break
                     }

@@ -62,6 +62,12 @@ public actor TCPDirectPeerTransport {
     private var events: AsyncThrowingStream<Event, any Swift.Error>.Continuation?
     private var opening: CheckedContinuation<Void, any Swift.Error>?
     private var deadline: Task<Void, Never>?
+    /// Events shed because the session consumer fell behind the event
+    /// buffer. Losing one is recoverable (a lost message is a lost screen
+    /// frame, healed by refresh; a lost disconnect is still detected by the
+    /// login deadline and heartbeat paths) — killing the whole transport,
+    /// listener and every candidate with it was not.
+    public private(set) var droppedEvents = 0
 
     public init(maximumPayloadLength: Int = 16 * 1024 * 1024) {
         precondition(maximumPayloadLength >= 32 && maximumPayloadLength <= Int(Int32.max))
@@ -250,7 +256,7 @@ public actor TCPDirectPeerTransport {
 
     private func publish(_ event: Event) {
         switch events?.yield(event) {
-        case .dropped: finish(Error.consumerTooSlow)
+        case .dropped: droppedEvents += 1
         case .terminated: finish(nil)
         default: break
         }

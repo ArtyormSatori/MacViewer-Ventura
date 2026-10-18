@@ -79,6 +79,12 @@ final class ConnectionModel: ObservableObject {
     private var inputGeneration = UUID()
     private var generation = UUID()
     private var audioTask: Task<Void, Never>?
+    /// Held for the life of a viewer session so App Nap cannot coalesce
+    /// the protocol heartbeat timers while the window sits in the
+    /// background — the host side already asserts the same way. An idle
+    /// session whose timers get coalesced looks exactly like the "leave it
+    /// a moment, come back, it's disconnected" failure.
+    private var sessionActivity: NSObjectProtocol?
     private var audioRevision: UInt64 = 0
     private var desiredAudioEnabled = false
 
@@ -200,6 +206,7 @@ final class ConnectionModel: ObservableObject {
         generation = UUID()
         connectionTask?.cancel()
         connectionTask = nil
+        endSessionActivity()
         pendingCredential = nil
         stopInput()
         resetControlPosture()
@@ -435,10 +442,19 @@ final class ConnectionModel: ObservableObject {
         case let .status(message):
             status = message
         case let .connected(info):
-            guard phase == .connecting else { return }
+            // `.connected` also fires when an auto-reconnect lands mid-
+            // session: the full setup below (input, control posture,
+            // cursor + quality re-send) is idempotent, so a resume simply
+            // re-runs it and the session continues against the same
+            // partner. `pendingCredential` is already consumed by then, so
+            // nothing is stored twice.
+            guard phase == .connecting || phase == .connected else { return }
+            let resumed = phase == .connected
             remoteInfo = info
             phase = .connected
+            if resumed { errorMessage = nil }
             status = "Connected to \(info.displayName ?? info.partnerID)."
+            beginSessionActivity()
             rememberPartner(info.partnerID)
             if let pending = pendingCredential {
                 pendingCredential = nil
@@ -524,6 +540,7 @@ final class ConnectionModel: ObservableObject {
         let hadConnected = phase == .connected
         generation = UUID()
         connectionTask?.cancel(); connectionTask = nil
+        endSessionActivity()
         pendingCredential = nil
         stopInput()
         resetControlPosture()
@@ -542,6 +559,7 @@ final class ConnectionModel: ObservableObject {
     private func endSession(message: String) {
         generation = UUID()
         connectionTask?.cancel(); connectionTask = nil
+        endSessionActivity()
         pendingCredential = nil
         stopInput()
         resetControlPosture()
@@ -554,6 +572,21 @@ final class ConnectionModel: ObservableObject {
         frame = nil
         displayedFrame = nil; selectedMonitor = 0
         remoteInfo = nil
+    }
+
+    private func beginSessionActivity() {
+        guard sessionActivity == nil else { return }
+        // `.userInitiated` is the option that also opts the process out of
+        // App Nap timer coalescing for the assertion's lifetime.
+        sessionActivity = ProcessInfo.processInfo.beginActivity(
+            options: [.idleSystemSleepDisabled, .userInitiated],
+            reason: "MacViewer remote session")
+    }
+
+    private func endSessionActivity() {
+        guard let sessionActivity else { return }
+        ProcessInfo.processInfo.endActivity(sessionActivity)
+        self.sessionActivity = nil
     }
 
     private func startInput(releasingHeldInput: Bool = false) {
