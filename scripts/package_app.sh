@@ -39,9 +39,11 @@ swift build "${build_flags[@]}" --product MacViewer
 binary_directory="$(swift build "${build_flags[@]}" --show-bin-path)"
 app_directory="$project_root/dist/MacViewer.app"
 mkdir -p "$app_directory/Contents/MacOS" "$app_directory/Contents/Resources"
-icon_directory="$project_root/.build/MacViewer.iconset"
-swift scripts/make_app_icon.swift "$icon_directory"
-iconutil -c icns "$icon_directory" -o "$app_directory/Contents/Resources/MacViewer.icns"
+# The S3 app icon ships prebuilt (5.0): scripts/MacViewer.icns is a
+# byte-identical copy of the settled production set, with
+# scripts/AppIcon.appiconset as its canonical PNG source.
+# AppIconTests pins the two artifacts together.
+cp "$project_root/scripts/MacViewer.icns" "$app_directory/Contents/Resources/MacViewer.icns"
 for language in en vi; do
   mkdir -p "$app_directory/Contents/Resources/$language.lproj"
   cp "Sources/MacViewer/Resources/$language.lproj/Localizable.strings" "$app_directory/Contents/Resources/$language.lproj/Localizable.strings"
