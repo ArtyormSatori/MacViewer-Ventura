@@ -20,6 +20,9 @@ struct MeshModeView: View {
                     firstRun
                 } else {
                     thisDeviceCard
+                    if let controller = mesh.sessionController {
+                        MeshSessionBanner(controller: controller)
+                    }
                     connectBlock
                     if !mesh.pendingRequests.isEmpty { requestsCard }
                     pairedBlock
@@ -261,6 +264,13 @@ struct MeshModeView: View {
                                     .font(.system(size: 12, design: .monospaced))
                                     .foregroundStyle(.secondary)
                             }
+                            if let controller = mesh.sessionController {
+                                Button("Connect") {
+                                    controller.requestSession(to: device.id, peerName: device.name)
+                                }
+                                .buttonStyle(.bordered).controlSize(.small)
+                                .disabled(!controller.canStartSession)
+                            }
                         }
                         .padding(.horizontal, 16).padding(.vertical, 11)
                         if device.id != mesh.pairedDevices.last?.id { Divider().padding(.leading, 37) }
@@ -287,5 +297,60 @@ struct MeshModeView: View {
     private func copy(_ value: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(value, forType: .string)
+    }
+}
+
+/// Session state strip shown under the This-device card while a
+/// negotiation is pending, active, or just ended (Phase 3, chunk 2).
+/// The host side has no session window by design (spec §5.4), so
+/// this strip — plus the session window on the viewer side — is
+/// where a live session is seen and ended.
+private struct MeshSessionBanner: View {
+    @ObservedObject var controller: MeshSessionController
+
+    var body: some View {
+        switch controller.phase {
+        case let .outgoingPending(_, peer, peerName, _):
+            strip {
+                ProgressView().controlSize(.small)
+                Text(LF("Waiting for %@ to answer…", peerName ?? peer.formatted))
+                    .font(.callout)
+                Spacer()
+                Button("Cancel request") { controller.cancelOutgoing() }
+                    .buttonStyle(.bordered).controlSize(.small)
+            }
+        case let .active(_, peer, peerName, role, _, _):
+            strip {
+                Image(systemName: "dot.radiowaves.left.and.right")
+                    .foregroundStyle(.green)
+                Text(role == .host
+                     ? LF("%@ is connected to this device.", peerName ?? peer.formatted)
+                     : LF("Connected to %@.", peerName ?? peer.formatted))
+                    .font(.callout.weight(.medium))
+                Spacer()
+                Button("End session", role: .destructive) { controller.endSession() }
+                    .buttonStyle(.bordered).controlSize(.small)
+            }
+        case .ended:
+            strip {
+                Image(systemName: "info.circle").foregroundStyle(.secondary)
+                Text(controller.statusMessage ?? L("Session ended"))
+                    .font(.callout).foregroundStyle(.secondary)
+                Spacer()
+                Button("Close") { controller.dismissEnded() }
+                    .buttonStyle(.bordered).controlSize(.small)
+            }
+        default:
+            EmptyView()
+        }
+    }
+
+    private func strip<C: View>(@ViewBuilder _ content: () -> C) -> some View {
+        HStack(spacing: 10) { content() }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16).padding(.vertical, 11)
+            .background(Color(nsColor: .controlBackgroundColor),
+                        in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.primary.opacity(0.09)))
     }
 }

@@ -384,3 +384,33 @@
 "Pairing request sent. Waiting for the other device to approve." = "Pairing request sent. Waiting for the other device to approve.";
 "Already paired with this device." = "Already paired with this device.";
 "Pairing approved." = "Pairing approved.";
+
+/* Mode 2 session negotiation (Phase 3 chunk 2) */
+"Not connected to the mesh server. Reopen Self-hosted to reconnect." = "Not connected to the mesh server. Reopen Self-hosted to reconnect.";
+"Could not reach %@." = "Could not reach %@.";
+"You cancelled the request." = "You cancelled the request.";
+"%@ is connected to this device." = "%@ is connected to this device.";
+"You rejected the request from %@." = "You rejected the request from %@.";
+"You ended the session." = "You ended the session.";
+"%@ is busy with another session." = "%@ is busy with another session.";
+"%@ rejected the request." = "%@ rejected the request.";
+"The request timed out." = "The request timed out.";
+"The request was cancelled." = "The request was cancelled.";
+"%@ ended the session." = "%@ ended the session.";
+"The request from %@ timed out." = "The request from %@ timed out.";
+"The request from %@ was cancelled." = "The request from %@ was cancelled.";
+"Incoming session request" = "Incoming session request";
+"%@ wants to connect to this device." = "%@ wants to connect to this device.";
+"Can view the screen" = "Can view the screen";
+"Can control mouse and keyboard" = "Can control mouse and keyboard";
+"If you do not answer within 60 seconds, the request is rejected automatically." = "If you do not answer within 60 seconds, the request is rejected automatically.";
+"Mesh session" = "Mesh session";
+"Waiting for %@ to answer…" = "Waiting for %@ to answer…";
+"Signaling connected · media arrives with the M1 update" = "Signaling connected · media arrives with the M1 update";
+"Cancel request" = "Cancel request";
+"Close" = "Close";
+"Session started" = "Session started";
+"View" = "View";
+"The request is no longer waiting." = "The request is no longer waiting.";
+"Connected to %@." = "Connected to %@.";
+"Session ended" = "Session ended";

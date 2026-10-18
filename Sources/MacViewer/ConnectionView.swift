@@ -10,6 +10,7 @@ struct ConnectionView: View {
     @ObservedObject var remoteCapture: RemoteCaptureController
     @ObservedObject var updater: UpdateChecker
     @StateObject private var mesh = MeshSessionModel()
+    @State private var meshSessionWindows = MeshSessionWindows()
     @AppStorage(AppMode.defaultsKey) private var appMode = AppMode.ultraViewer
     @AppStorage(MeshDefaults.serverAddressKey) private var meshServerAddress = ""
     @State private var remoteDisplayScale: RemoteDisplayScale = .fit
@@ -65,6 +66,9 @@ struct ConnectionView: View {
         .onDisappear { remoteCapture.endSession(); model.disconnect(); hosting.stop() }
         .onDisappear { Task { await mesh.stop() } }
         .onChange(of: meshServerAddress) { _ in Task { await mesh.serverChanged() } }
+        .onReceive(mesh.$sessionController.compactMap { $0 }) { controller in
+            meshSessionWindows.bind(to: controller)
+        }
         .onChange(of: hosting.identifier) { id in if id == nil { revealPassword = false } }
         .onChange(of: model.phase) { phase in
             if phase == .connecting || phase == .connected { showSession = true }

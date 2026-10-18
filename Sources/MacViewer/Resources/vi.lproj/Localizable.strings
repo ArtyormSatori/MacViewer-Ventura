@@ -384,3 +384,33 @@
 "Pairing request sent. Waiting for the other device to approve." = "Đã gửi yêu cầu ghép cặp. Đang chờ thiết bị kia đồng ý.";
 "Already paired with this device." = "Đã ghép cặp với thiết bị này.";
 "Pairing approved." = "Đã đồng ý ghép cặp.";
+
+/* Mode 2 session negotiation (Phase 3 chunk 2) */
+"Not connected to the mesh server. Reopen Self-hosted to reconnect." = "Chưa kết nối tới máy chủ mesh. Mở lại mục Tự host để kết nối lại.";
+"Could not reach %@." = "Không kết nối được tới %@.";
+"You cancelled the request." = "Bạn đã huỷ yêu cầu.";
+"%@ is connected to this device." = "%@ đang kết nối tới thiết bị này.";
+"You rejected the request from %@." = "Bạn đã từ chối yêu cầu từ %@.";
+"You ended the session." = "Bạn đã kết thúc phiên.";
+"%@ is busy with another session." = "%@ đang bận với một phiên khác.";
+"%@ rejected the request." = "%@ đã từ chối yêu cầu.";
+"The request timed out." = "Yêu cầu đã hết thời gian chờ.";
+"The request was cancelled." = "Yêu cầu đã bị huỷ.";
+"%@ ended the session." = "%@ đã kết thúc phiên.";
+"The request from %@ timed out." = "Yêu cầu từ %@ đã hết thời gian chờ.";
+"The request from %@ was cancelled." = "Yêu cầu từ %@ đã bị huỷ.";
+"Incoming session request" = "Yêu cầu phiên đến";
+"%@ wants to connect to this device." = "%@ muốn kết nối tới thiết bị này.";
+"Can view the screen" = "Xem màn hình";
+"Can control mouse and keyboard" = "Điều khiển chuột và bàn phím";
+"If you do not answer within 60 seconds, the request is rejected automatically." = "Nếu bạn không trả lời trong 60 giây, yêu cầu sẽ tự động bị từ chối.";
+"Mesh session" = "Phiên Mesh";
+"Waiting for %@ to answer…" = "Đang chờ %@ trả lời…";
+"Signaling connected · media arrives with the M1 update" = "Đã kết nối tín hiệu · media sẽ có ở bản cập nhật M1";
+"Cancel request" = "Huỷ yêu cầu";
+"Close" = "Đóng";
+"Session started" = "Phiên đã bắt đầu";
+"View" = "Xem";
+"The request is no longer waiting." = "Yêu cầu không còn chờ nữa.";
+"Connected to %@." = "Đang kết nối tới %@.";
+"Session ended" = "Phiên đã kết thúc";

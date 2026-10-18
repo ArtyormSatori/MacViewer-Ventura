@@ -23,10 +23,10 @@ extension MeshServerClient: MeshServerAPI {}
 /// and a `MeshSignalingClient` for presence — the server counts a
 /// device as online only while its signaling connection is live.
 ///
-/// Session establishment (WebRTC media) is the next Mode 2 chunk: after
-/// a pairing is approved the devices are listed as paired, and that is
-/// where this model stops. TODO(M1): hand an approved, paired peer to
-/// the session layer to open the media path.
+/// Session negotiation lives in `MeshSessionController` (Phase 3,
+/// chunk 2): once signaling is live the model builds one and publishes
+/// it as `sessionController`; views and the session windows bind to
+/// it. Media itself (WebRTC) is still milestone M1.
 @MainActor
 final class MeshSessionModel: ObservableObject {
     enum Phase: Equatable {
@@ -58,6 +58,9 @@ final class MeshSessionModel: ObservableObject {
     @Published private(set) var statusMessage: String?
     @Published private(set) var errorMessage: String?
     @Published private(set) var isBusy = false
+    /// The session-negotiation controller bound to the live signaling
+    /// connection, if any. Rebuilt whenever signaling reconnects.
+    @Published private(set) var sessionController: MeshSessionController?
 
     private let identityStore: any MeshIdentityStore
     private let makeClient: (URL) -> any MeshServerAPI
@@ -166,6 +169,8 @@ final class MeshSessionModel: ObservableObject {
 
     /// Tears down presence. The identity and pairings persist.
     func stop() async {
+        sessionController?.stop()
+        sessionController = nil
         await signaling?.close()
         signaling = nil
         isOnline = false
@@ -182,9 +187,9 @@ final class MeshSessionModel: ObservableObject {
 
     // MARK: Pairing actions
 
-    /// The Mode 2 "Connect" action for this chunk (spec §5.2/§6.3):
-    /// sends a pairing request to the entered Mesh ID. Opening a media
-    /// session to an already-paired device is the next chunk.
+    /// The Mode 2 connect-by-ID action (spec §5.2/§6.3): sends a
+    /// pairing request to the entered Mesh ID. Sessions to devices
+    /// that are already paired start from their Paired-list row.
     func connect(toRawID raw: String) async {
         guard let identity, let meshID, phase == .ready else { return }
         errorMessage = nil
@@ -293,6 +298,8 @@ final class MeshSessionModel: ObservableObject {
             isOnline = true
             return
         }
+        sessionController?.stop()
+        sessionController = nil
         await signaling?.close()
         signaling = nil
         isOnline = false
@@ -301,6 +308,18 @@ final class MeshSessionModel: ObservableObject {
             try await fresh.connect()
             signaling = fresh
             isOnline = fresh.isConnected
+            if fresh.isConnected {
+                // Negotiation rides the same connection: the
+                // controller consumes its signal stream from here on.
+                let controller = MeshSessionController(
+                    signaling: fresh,
+                    isPaired: { [weak self] peer in
+                        self?.pairedDevices.contains { $0.id == peer } ?? false
+                    },
+                    localName: { [weak self] in self?.deviceName ?? "Mac" })
+                sessionController = controller
+                controller.start()
+            }
         } catch {
             // Presence stays offline; the REST control plane still
             // works and the next refresh retries the connection.
