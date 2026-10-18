@@ -13,6 +13,28 @@ protocol RemoteAudioPlayback: AnyObject {
 
 extension RemoteAudioPlayer: RemoteAudioPlayback {}
 
+/// Carries the session adapter into `SessionSendRace`'s `@Sendable`
+/// operation closure (FX-3) without a Sendable conformance cascade
+/// through every adapter conformer.
+///
+/// `@unchecked` is justified by the model's send discipline, verified
+/// at the only two call sites (both in this file — no other code calls
+/// `adapter.send`): the protocol is `@MainActor`-isolated, so each
+/// `send` still executes on the main actor — the box moves only the
+/// *reference* across the closure boundary, never the execution. The
+/// drain task issues sends strictly one at a time (it awaits each
+/// send's race before popping the next input), and `failInput`'s
+/// ordered release is awaited by that same drain task after its loop
+/// has exited. The one overlap is `SessionSendRace`'s own documented
+/// semantics, already relied on by the heartbeat race in the session:
+/// a timed-out send is abandoned, not awaited, and may still be parked
+/// when the release is issued — harmless below, because adapter state
+/// stays main-actor confined and the session engine is an actor that
+/// serializes the actual wire writes.
+private struct AdapterSendBox: @unchecked Sendable {
+    let adapter: any MacViewerSessionAdapter
+}
+
 @MainActor
 final class ConnectionModel: ObservableObject {
     enum Phase: Equatable {
@@ -634,9 +656,9 @@ final class ConnectionModel: ObservableObject {
                         // this input generation exactly like a thrown
                         // send error: visible message, control off,
                         // user can re-enable and start a fresh drain.
-                        let sendTarget = adapter
+                        let sendBox = AdapterSendBox(adapter: adapter)
                         try await SessionSendRace.run(timeout: inputSendTimeout) {
-                            try await sendTarget.send(input)
+                            try await sendBox.adapter.send(input)
                         }
                     }
                 }
@@ -676,9 +698,9 @@ final class ConnectionModel: ObservableObject {
         // send: if it could hang here, `inputBuffer` would never clear
         // and control could never be restarted — the timeout fix would
         // defeat itself in its own recovery path.
-        let sendTarget = adapter
+        let sendBox = AdapterSendBox(adapter: adapter)
         try? await SessionSendRace.run(timeout: inputSendTimeout) {
-            try await sendTarget.send(.releaseAll)
+            try await sendBox.adapter.send(.releaseAll)
         }
         guard generation == token, inputGeneration == inputToken else { return }
         inputBuffer = nil
