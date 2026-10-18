@@ -1,7 +1,5 @@
 ## MacViewer Ventura — 4.0
 
-Fork của MacViewer của DeanOpen, cho macOS 13 Ventura trở lên, Intel + Apple Silicon.
-
 **Thay đổi chính**
 - Tên hiển thị mới: **MacViewer Ventura**; số phiên bản riêng **4.0**.
 - Bản cập nhật đầu tiên giao qua cơ chế tự cập nhật trong app (có từ 3.0): máy đang chạy 3.0 sẽ tự thấy bản 4.0 — bấm **Cập nhật và khởi động lại**, app tự tải, đối chiếu SHA-256, cài đè và mở lại, không còn cảnh báo "nhà phát triển chưa xác định".
@@ -17,8 +15,6 @@ CI: toàn bộ test chạy trước khi đóng gói. Đối chiếu bản tải 
 ---
 
 ## English
-
-Fork of MacViewer by DeanOpen, for macOS 13 Ventura and later, Intel + Apple Silicon.
 
 **Main changes**
 - New display name: **MacViewer Ventura**; own version number **4.0**.

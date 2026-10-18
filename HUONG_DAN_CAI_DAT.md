@@ -1,6 +1,6 @@
 # Hướng dẫn cài đặt và sử dụng — MacViewer Ventura
 
-MacViewer Ventura là client UltraViewer cho macOS (fork của [MacViewer của DeanOpen](https://github.com/DeanOpen/MacViewer)): điều khiển máy Windows chạy UltraViewer từ máy Mac bằng ID + mật khẩu, và cho máy khác truy cập máy Mac của bạn sau khi bạn đồng ý. Yêu cầu: macOS 13 Ventura trở lên, Intel hoặc Apple Silicon.
+MacViewer Ventura là client UltraViewer cho macOS: điều khiển máy Windows chạy UltraViewer từ máy Mac bằng ID + mật khẩu, và cho máy khác truy cập máy Mac của bạn sau khi bạn đồng ý. Yêu cầu: macOS 13 Ventura trở lên, Intel hoặc Apple Silicon.
 
 ## 1. Cài đặt
 
@@ -61,7 +61,7 @@ Từ bản 3.0, app tự kiểm tra bản mới. Có bản mới: bấm **Cập 
 
 ### Install & usage guide — MacViewer Ventura
 
-MacViewer Ventura is an UltraViewer client for macOS (fork of [MacViewer by DeanOpen](https://github.com/DeanOpen/MacViewer)): control a Windows machine running UltraViewer from your Mac with its ID + password, and let another machine access your Mac after you approve. Requires macOS 13 Ventura or later, Intel or Apple Silicon.
+MacViewer Ventura is an UltraViewer client for macOS: control a Windows machine running UltraViewer from your Mac with its ID + password, and let another machine access your Mac after you approve. Requires macOS 13 Ventura or later, Intel or Apple Silicon.
 
 ## 1. Install
 
