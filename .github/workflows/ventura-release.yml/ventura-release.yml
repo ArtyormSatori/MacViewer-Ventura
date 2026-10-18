@@ -1,0 +1,88 @@
+name: Ventura Build & Release
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build for macOS 13 Ventura (universal)
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      TAG: v0.3.4-ventura.1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Fetch 8bit.dat (binary asset, not stored in this repo)
+        run: |
+          curl -fL -o Sources/UltraViewerProtocol/Resources/8bit.dat "https://raw.githubusercontent.com/DeanOpen/MacViewer/f8d1b6529e673df3fe35fccdd4b65f7474e354b7/Sources/UltraViewerProtocol/Resources/8bit.dat"
+          echo "9aa45789d9ff9d329a623a685d57b67e33c777019de9ce1f273f21860e4bfe6b  Sources/UltraViewerProtocol/Resources/8bit.dat" | shasum -a 256 -c -
+
+      - name: Run tests
+        run: |
+          set -o pipefail
+          swift test --parallel 2>&1 | tee -a "$GITHUB_WORKSPACE/build-log.txt"
+
+      - name: Package universal app
+        env:
+          MACVIEWER_SIGNING_IDENTITY: "-"
+          MACVIEWER_UNIVERSAL: "1"
+          MACVIEWER_VERSION: "0.3.4"
+          MACVIEWER_BUILD_NUMBER: "6"
+        run: |
+          set -o pipefail
+          scripts/package_app.sh release 2>&1 | tee -a "$GITHUB_WORKSPACE/build-log.txt"
+          echo "--- LSMinimumSystemVersion ---" | tee -a "$GITHUB_WORKSPACE/build-log.txt"
+          /usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" dist/MacViewer.app/Contents/Info.plist 2>&1 | tee -a "$GITHUB_WORKSPACE/build-log.txt"
+          echo "--- Architectures ---" | tee -a "$GITHUB_WORKSPACE/build-log.txt"
+          lipo -info dist/MacViewer.app/Contents/MacOS/MacViewer 2>&1 | tee -a "$GITHUB_WORKSPACE/build-log.txt"
+
+      - name: Build ZIP
+        run: |
+          mkdir -p release
+          ditto -c -k --sequesterRsrc --keepParent dist/MacViewer.app "release/MacViewer-0.3.4-Ventura.zip"
+
+      - name: Build DMG (optional)
+        continue-on-error: true
+        run: |
+          python3 -m venv "$RUNNER_TEMP/dmgbuild"
+          "$RUNNER_TEMP/dmgbuild/bin/pip" install --quiet dmgbuild==1.6.5
+          PATH="$RUNNER_TEMP/dmgbuild/bin:$PATH" scripts/make_dmg.sh dist/MacViewer.app "0.3.4-Ventura" "release/MacViewer-0.3.4-Ventura.dmg"
+
+      - name: Checksums
+        run: |
+          cd release
+          shasum -a 256 * > SHA256SUMS-Ventura.txt
+          cat SHA256SUMS-Ventura.txt
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/* --clobber
+          else
+            gh release create "$TAG" release/* --title "MacViewer 0.3.4 for macOS Ventura (13)" --notes-file .github/ventura-release-notes.md
+          fi
+
+      - name: Upload build log (always)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp "$GITHUB_WORKSPACE/build-log.txt" "build-log-${{ github.run_number }}.txt" 2>/dev/null || echo "no log" > "build-log-${{ github.run_number }}.txt"
+          if gh release view ci-logs >/dev/null 2>&1; then
+            gh release upload ci-logs "build-log-${{ github.run_number }}.txt" --clobber
+          else
+            gh release create ci-logs "build-log-${{ github.run_number }}.txt" --prerelease --title "CI build logs" --notes "Diagnostic build logs for the Ventura build."
+          fi
