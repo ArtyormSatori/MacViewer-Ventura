@@ -50,3 +50,33 @@ chính giao thức UltraViewer. Từng mục dưới đây ghi rõ trần đó.
    (b) Supabase/Firebase free tier; (c) tạm để hồ sơ cục bộ trên máy.
    Đây là một tiểu dự án riêng (đăng ký/đăng nhập, bảo mật, đồng bộ),
    không gộp vào bản Ventura đầu tiên.
+
+## Gói chất lượng (yêu cầu bổ sung 2026-10-18: mượt + nét như RustDesk)
+
+Số liệu đo từ code hiện tại cho thấy nút thắt thật:
+
+- Phía host (Mac bị điều khiển) chụp màn hình theo nhịp **250 ms/lần**
+  (`UltraViewerHostSession`, chờ ACK từng khung) → tối đa ~4 FPS. Đây là
+  nguồn giật lớn nhất, không phải mạng.
+- Đường modern nén Zstd level 1 (ưu tiên tốc độ), ảnh RGB555 gây vệt bậc
+  màu (banding) rõ trên gradient.
+- Phía viewer đã có sẵn các mức Automatic / Speed / Quality / Custom.
+
+Đòn bẩy sẽ làm trong Giai đoạn A2 (Mac↔Mac đạt nhiều nhất):
+
+1. Nhịp chụp thích ứng: 250 ms → 50–100 ms khi màn hình đang thay đổi,
+   lùi lại khi tĩnh; vẫn chờ ACK nhưng pipeline sâu hơn khi mạng khỏe.
+   Mục tiêu: 15–20 FPS phía host thay vì ~4.
+2. Màu 32-bit (mục 3 ở Giai đoạn A) — hết banding trên ảnh gradient.
+3. Tinh chỉnh Zstd theo chế độ chất lượng (level + dictionary) thay vì
+   một level 1 cố định cho mọi trường hợp.
+4. Ưu tiên đường kết nối trực tiếp trong LAN (đã có
+   `TCPDirectPeerTransport`) và hiển thị rõ đang đi trực tiếp hay qua relay.
+5. Viewer: gộp khung mới nhất (bỏ khung trễ thay vì phát lại hàng đợi),
+   smooth scaling mặc định bật.
+
+Trần trung thực: RustDesk dùng giao thức riêng, nén video phần cứng
+H.264/VP9 qua UDP. Khi đầu kia là UltraViewer Windows, trần chất lượng là
+của chính giao thức UltraViewer (TCP relay, cập nhật theo hình chữ nhật,
+16-bit) — không một client nào vượt được trần đó. Gói này nâng tới trần
+đó, và nâng cao hơn hẳn cho phiên Mac↔Mac nơi ta kiểm soát cả hai đầu.
