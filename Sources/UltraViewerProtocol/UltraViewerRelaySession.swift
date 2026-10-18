@@ -79,6 +79,12 @@ public actor UltraViewerRelaySession {
         public var clipboardMessagesReceived = 0
         public var relayRoundTripMilliseconds: Double?
         public var peerRoundTripMilliseconds: Double?
+        /// Uptime nanoseconds of the most recent host "20" reply (the
+        /// forward-path probe, LAG_AUDIT FX-4) and of the most recent
+        /// relay "pong"; their freshness pair is what separates a dead
+        /// forward hop from a dead connection.
+        public var lastPeerPingReplyUptimeNanoseconds: UInt64?
+        public var lastRelayPongUptimeNanoseconds: UInt64?
         public var decodeNanoseconds: UInt64 = 0
         public var maximumDecodeNanoseconds: UInt64 = 0
         public var screenPayloadBytes: UInt64 = 0
@@ -164,6 +170,18 @@ public actor UltraViewerRelaySession {
     /// resulting `Failure.closed` is not mistaken for a network death.
     private var hostEndedSession = false
     private var zstdTolerance = ScreenDecodeTolerance()
+    /// Forward-path health (FX-4): the "20" probe's replies tracked
+    /// against relay pongs so a silently dead viewer→host hop is
+    /// detected even while video keeps flowing.
+    private var forwardPath = PeerForwardPathHealth()
+    /// Per-episode decode-error refresh budget (FX-6): reset by every
+    /// successful (re-)initialisation, unlike the lifetime diagnostics
+    /// counter it replaces at the tolerance guard.
+    private var refreshBudget = SessionRefreshBudget()
+    /// Decoded-but-unpresented frame pacing (FX-2): the frame ACK is
+    /// withheld while more than `bound` decoded frames still await
+    /// presentation, so production tracks consumption.
+    private var pacing = FramePacingGate(bound: 2)
     private var reconnectInProgress = false
     private var reconnectTask: Task<Void, Never>?
     private var attemptFailed = false
@@ -223,6 +241,9 @@ public actor UltraViewerRelaySession {
         self.commandLeg = RelayLegLiveness()
         self.hostEndedSession = false
         self.zstdTolerance = ScreenDecodeTolerance()
+        self.forwardPath = PeerForwardPathHealth()
+        self.refreshBudget = SessionRefreshBudget()
+        self.pacing = FramePacingGate(bound: 2)
         self.reconnectInProgress = false
         self.attemptFailed = false
         self.attemptError = nil
@@ -679,6 +700,9 @@ public actor UltraViewerRelaySession {
         if case let .system(payload) = envelope {
             if payload == Data("pong".utf8) {
                 diagnostics.relayPongsReceived += 1
+                let pongReceivedAt = DispatchTime.now().uptimeNanoseconds
+                diagnostics.lastRelayPongUptimeNanoseconds = pongReceivedAt
+                forwardPath.noteRelayPong(at: pongReceivedAt)
                 if let started = relayPingStarted {
                     diagnostics.relayRoundTripMilliseconds = Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000
                     relayPingStarted = nil
@@ -805,6 +829,9 @@ public actor UltraViewerRelaySession {
             phase = .active
             deadline?.cancel()
             zstdTolerance.noteSuccess()
+            // A successful (re-)initialisation starts a fresh episode:
+            // the decode-error refresh budget is restored in full (FX-6).
+            refreshBudget.reset()
             let previouslyAccepted = diagnostics.peerAccepted
             diagnostics.peerAccepted = true
             if heartbeat == nil {
@@ -851,12 +878,17 @@ public actor UltraViewerRelaySession {
                 diagnostics.maximumDecodeNanoseconds = max(diagnostics.maximumDecodeNanoseconds, elapsed)
                 diagnostics.decodedFrames += 1
                 zstdTolerance.noteSuccess()
+                pacing.noteFrameDecoded()
                 try emit(.frame(bitmap))
-                // Backpressure follows successful decoding, so a slow client
-                // cannot acknowledge a growing queue of stale screen updates.
-                // A lost ACK is recoverable — the next frame re-syncs — and
-                // must not kill the session; a dead socket still surfaces
-                // through the read loop.
+                // ACK pacing (FX-2): the host produces on this ACK, so
+                // it is withheld while more than the pacing bound of
+                // decoded frames still await presentation — production
+                // tracks the presentation rate instead of piling stale
+                // frames (and decode work) ahead of it. A lost ACK is
+                // recoverable — the next frame re-syncs — and must not
+                // kill the session; a dead socket still surfaces through
+                // the read loop.
+                await waitForPresentationCapacity(token: token)
                 try? await sendToPeer(Data("18".utf8))
             } catch let error as ModernScreenMessageError {
                 diagnostics.lastScreenFailure = String(describing: error)
@@ -864,7 +896,12 @@ public actor UltraViewerRelaySession {
                 // A malformed drawing mission must not immediately tear down an
                 // authenticated connection. A new full initialization resets the
                 // decoder and tile cache together; never continue a damaged cache.
-                guard diagnostics.screenRefreshes < 2 else { throw error }
+                // The tolerance budget is per connection episode (FX-6):
+                // the command-0 handler restores it on every successful
+                // (re-)initialisation, so ancient refreshes from earlier
+                // episodes of a long session cannot make a routine
+                // hiccup fatal. Lifetime refreshes stay in diagnostics.
+                guard refreshBudget.consume() else { throw error }
                 try await refreshScreen()
             } catch let error as ZstdScreenDecoder.Error {
                 // A corrupt zstd payload used to escape the typed catch
@@ -878,8 +915,11 @@ public actor UltraViewerRelaySession {
                 try await refreshScreen()
             }
         case 20:
+            let peerReplyAt = DispatchTime.now().uptimeNanoseconds
+            diagnostics.lastPeerPingReplyUptimeNanoseconds = peerReplyAt
+            forwardPath.notePeerPingReply(at: peerReplyAt)
             if let started = peerPingStarted {
-                diagnostics.peerRoundTripMilliseconds = Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000
+                diagnostics.peerRoundTripMilliseconds = Double(peerReplyAt - started) / 1_000_000
                 peerPingStarted = nil
             }
         case 23:
@@ -965,6 +1005,22 @@ public actor UltraViewerRelaySession {
             await connectionFailed(Failure.timedOut, token: token, loop: nil)
             return
         }
+        // Forward-path gate (FX-4): the watchdog above only sees
+        // inbound silence, but the viewer→host hop can die on its own —
+        // the relay stops forwarding, or the host stops consuming —
+        // while video keeps the watchdog fed and local sends keep
+        // "succeeding". The "20" probe already crosses that hop every
+        // tick; if its replies have stopped for a full window while
+        // relay pongs (which never cross the hop) kept arriving, the
+        // forward path is dead even though the connection looks alive,
+        // and the session takes the same reconnect-or-finish path as
+        // any other network death. Both signals are required, so a
+        // merely slow host — or a fully silent leg, which the watchdog
+        // above owns — never trips this gate.
+        if forwardPath.isForwardPathDead(at: now, window: Self.peerStaleWindowNanoseconds) {
+            await connectionFailed(Failure.timedOut, token: token, loop: nil)
+            return
+        }
         // While a direct channel carries the session, the relay leg is a
         // fallback. If it silently died, record that in state — a later
         // direct failure then finishes honestly instead of restoring
@@ -995,7 +1051,9 @@ public actor UltraViewerRelaySession {
         }
         guard token == generation, phase == .active else { return }
         do {
-            peerPingStarted = DispatchTime.now().uptimeNanoseconds
+            let pingSentAt = DispatchTime.now().uptimeNanoseconds
+            peerPingStarted = pingSentAt
+            forwardPath.notePeerPingSent(at: pingSentAt)
             try await sendWithTimeout { try await self.sendToPeer(Data("20".utf8)) }
             guard token == generation, phase == .active else { return }
             peerLeg.noteSendSucceeded()
@@ -1041,6 +1099,35 @@ public actor UltraViewerRelaySession {
     private func sendWithTimeout(_ operation: @escaping @Sendable () async throws -> Void) async throws {
         do { try await SessionSendRace.run(timeout: .seconds(10), operation: operation) }
         catch is SessionSendTimeout { throw Failure.timedOut }
+    }
+
+    /// Presentation-side consumption signal for ACK pacing (FX-2): the
+    /// adapter calls this as the app takes each decoded frame off the
+    /// presentation stream (presented, or discarded by the app layer —
+    /// either way the frame has left the decoded-but-unpresented set).
+    public func noteFrameConsumed() {
+        pacing.noteFrameConsumed()
+    }
+
+    /// Parks the frame handler until the presentation side has caught
+    /// up to the pacing bound, so the "18" ACK — and with it the host's
+    /// production — waits for the consumer instead of racing ahead of
+    /// it. The wait ends on its own if the attempt is torn down (phase
+    /// leaves `.active`, generation changes, or the consume task is
+    /// cancelled); the caller still attempts the ACK afterwards with
+    /// `try?`, which simply fails against a dismantled transport. If
+    /// the consumer has stalled entirely, no consumption signals ever
+    /// arrive and this handler stays parked — inbound processing with
+    /// it — until the reply watchdog / forward-path gate in
+    /// `sendHeartbeat` (which keeps running; the actor is reentrant
+    /// across this sleep) declares the leg dead and the reconnect
+    /// machinery takes over. A stalled presentation therefore surfaces
+    /// as a connection failure, never as a silent permanent hang.
+    private func waitForPresentationCapacity(token: UUID) async {
+        while pacing.shouldWithholdAcknowledgement {
+            guard token == generation, phase == .active, !Task.isCancelled else { return }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
     }
 
     private func expired(_ token: UUID) async {
@@ -1097,6 +1184,9 @@ public actor UltraViewerRelaySession {
         hostEndedSession = false
         relayLeg = RelayLegLiveness(); peerLeg = RelayLegLiveness(); commandLeg = RelayLegLiveness()
         zstdTolerance = ScreenDecodeTolerance()
+        forwardPath = PeerForwardPathHealth()
+        refreshBudget = SessionRefreshBudget()
+        pacing = FramePacingGate(bound: 2)
         audioEnabled = false; audioDecoder = nil
         relayPingStarted = nil; peerPingStarted = nil
         renderer = nil; configuration = nil; peerInfo = nil; registrationReply = nil
@@ -1180,6 +1270,9 @@ public actor UltraViewerRelaySession {
         peerVersion = ""
         relayLeg = RelayLegLiveness(); peerLeg = RelayLegLiveness(); commandLeg = RelayLegLiveness()
         zstdTolerance = ScreenDecodeTolerance()
+        forwardPath = PeerForwardPathHealth()
+        refreshBudget = SessionRefreshBudget()
+        pacing = FramePacingGate(bound: 2)
         hostEndedSession = false
         await command?.close()
         await peer?.close()

@@ -71,6 +71,16 @@ final class ConnectionModel: ObservableObject {
     private let audioPlayer: any RemoteAudioPlayback
     private let cursorPresenter = RemoteCursorPresenter()
     private let inputBufferCapacity: Int
+    /// Hard bound on one input send (FX-3). A send parked on a
+    /// half-open connection used to wedge the serial input drain
+    /// forever — no error, no timeout, video unaffected, input dead.
+    private let inputSendTimeout: Duration
+    /// Frames actually presented to the user. Against the session's
+    /// decoded-frame count this exposes a display-path backlog in the
+    /// field (LAG_AUDIT H1's discriminating test).
+    private(set) var presentedFrames = 0
+    /// Input sends abandoned by the FX-3 timeout.
+    private(set) var inputSendTimeouts = 0
     private var pendingCredential: (identifier: String, password: String)?
     private var connectionTask: Task<Void, Never>?
     private var inputTask: Task<Void, Never>?
@@ -90,9 +100,11 @@ final class ConnectionModel: ObservableObject {
 
     init(adapter: any MacViewerSessionAdapter, defaults: UserDefaults = .standard,
          credentials: (any PartnerCredentialStore)? = nil,
-         audioPlayer: (any RemoteAudioPlayback)? = nil, inputBufferCapacity: Int = 8192) {
+         audioPlayer: (any RemoteAudioPlayback)? = nil, inputBufferCapacity: Int = 8192,
+         inputSendTimeout: Duration = .seconds(5)) {
         precondition(inputBufferCapacity > 0)
         self.adapter = adapter
+        self.inputSendTimeout = inputSendTimeout
         self.defaults = defaults
         self.credentials = credentials ?? KeychainPartnerCredentialStore()
         self.audioPlayer = audioPlayer ?? RemoteAudioPlayer()
@@ -482,9 +494,15 @@ final class ConnectionModel: ObservableObject {
                 try await adapter.sendTyping(typing)
             })
         case let .frame(newFrame):
+            // The frame has left the adapter's presentation pipeline
+            // whether it is shown or discarded by the phase guard;
+            // signal consumption either way so frame coalescing and
+            // ACK pacing track reality (FX-1/FX-2).
+            adapter.noteFrameConsumed()
             guard phase == .connected else { return }
             frame = newFrame
             updateDisplayedFrame()
+            presentedFrames += 1
         case let .screenGeometryChanged(info):
             guard phase == .connected else { return }
             remoteInfo = info
@@ -606,7 +624,20 @@ final class ConnectionModel: ObservableObject {
                         guard generation == activeGeneration, inputGeneration == activeInputGeneration,
                               phase == .connected else { return }
                         if input != .releaseAll && !(controlEnabled && remoteInfo?.allowsRemoteInput == true) { continue }
-                        try await adapter.send(input)
+                        // FX-3: every input send is raced against a
+                        // hard timeout. The drain is serial — one send
+                        // in flight — so a send parked on a half-open
+                        // connection head-of-line-blocked ALL later
+                        // input forever, silently. On timeout the race
+                        // abandons the send (it may still land later,
+                        // harmlessly) and the error path below fails
+                        // this input generation exactly like a thrown
+                        // send error: visible message, control off,
+                        // user can re-enable and start a fresh drain.
+                        let sendTarget = adapter
+                        try await SessionSendRace.run(timeout: inputSendTimeout) {
+                            try await sendTarget.send(input)
+                        }
                     }
                 }
                 if let error = inputOverflow {
@@ -614,6 +645,7 @@ final class ConnectionModel: ObservableObject {
                 }
             } catch is CancellationError {
             } catch {
+                if error is SessionSendTimeout { inputSendTimeouts += 1 }
                 await failInput(error, buffer: buffer, generation: activeGeneration, inputGeneration: activeInputGeneration)
             }
         }
@@ -640,7 +672,14 @@ final class ConnectionModel: ObservableObject {
         if inputOverflow == nil, remoteInfo?.allowsRemoteInput == true {
             errorMessage = "Remote input stopped: \(error.localizedDescription)"
         }
-        try? await adapter.send(.releaseAll)
+        // The ordered release gets the same FX-3 bound as any input
+        // send: if it could hang here, `inputBuffer` would never clear
+        // and control could never be restarted — the timeout fix would
+        // defeat itself in its own recovery path.
+        let sendTarget = adapter
+        try? await SessionSendRace.run(timeout: inputSendTimeout) {
+            try await sendTarget.send(.releaseAll)
+        }
         guard generation == token, inputGeneration == inputToken else { return }
         inputBuffer = nil
         inputTask = nil

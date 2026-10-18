@@ -14,6 +14,9 @@ protocol MacViewerSessionAdapter: AnyObject {
     ) async throws -> AsyncThrowingStream<RemoteSessionEvent, Error>
 
     func send(_ input: RemoteInput) async throws
+    /// Signals that the app took one frame off the event stream
+    /// (presented or discarded); see the default implementation.
+    func noteFrameConsumed()
     func sendChat(_ text: String) async throws
     func sendTyping(_ typing: Bool) async throws
     func sendCommand(_ message: RemoteControlCommands.Message, requiresControl: Bool) async throws
@@ -26,6 +29,12 @@ protocol MacViewerSessionAdapter: AnyObject {
 }
 
 extension MacViewerSessionAdapter {
+    /// Signals that the app took one frame off the adapter's event
+    /// stream (presented, or discarded by a state guard — either way it
+    /// left the decoded-but-unpresented set). Drives frame coalescing
+    /// and ACK pacing (LAG_AUDIT FX-1/FX-2); adapters without a frame
+    /// pipeline ignore it.
+    func noteFrameConsumed() {}
     func sendChat(_ text: String) async throws { throw NativeSessionError.unavailable("Chat is unavailable for this connection.") }
     func sendTyping(_ typing: Bool) async throws {}
     func sendCommand(_ message: RemoteControlCommands.Message, requiresControl: Bool) async throws {

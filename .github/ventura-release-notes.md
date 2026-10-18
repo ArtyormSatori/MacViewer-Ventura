@@ -1,10 +1,11 @@
-## MacViewer Ventura — 4.0.1
+## MacViewer Ventura — 4.0.2
 
 **Thay đổi chính**
-- Sửa lỗi phiên tự ngắt khi để yên: app nay phát hiện được đường truyền chết im lặng (trước đây phiên có thể đã chết ngầm mà app không hề biết), mọi thao tác gửi đều có thời gian chờ tối đa, tín hiệu giữ kết nối được gửi đều trên cả hai kênh và socket bật TCP keepalive, app giữ phiên không bị App Nap bóp khi để yên, và khi kết nối rớt app tự kết nối lại (giãn cách tăng dần, trong khoảng hai phút) thay vì kết thúc phiên ngay.
-- Phiên bền hơn khi phía xử lý bị quá tải: thay vì kết thúc phiên, app nay bỏ qua khung hình thừa; lỗi giải nén màn hình đơn lẻ cũng được bỏ qua và tự khôi phục thay vì làm sập phiên.
-- Đặt lại tên các file đính kèm cho rõ nền tảng: bản Mac mang hậu tố -macOS, file tổng kiểm đổi thành SHA256SUMS-macOS.txt.
-- Cách cập nhật: máy đang chạy 4.0 sẽ thấy bản 4.0.1 qua kiểm tra cập nhật trong app — bấm **Cập nhật và khởi động lại**, app tự tải, đối chiếu SHA-256, cài đè và mở lại, không có cảnh báo "nhà phát triển chưa xác định".
+- Sửa lỗi lag tăng dần và chết điều khiển trong phiên dài (báo cáo thực tế trên 4.0.1): trước đây khung hình đã giải mã mà chưa kịp hiển thị bị dồn thành hàng đợi ngày càng dài — hình vẫn chạy nhưng trễ dần, và hiệu quả của mỗi cú bấm chuột phải chờ cả hàng đợi đó. Bản này chỉ giữ khung hình mới nhất cho khâu hiển thị (bỏ khung cũ, đếm số đã bỏ), đồng thời điều tiết nhịp báo nhận hình theo tốc độ hiển thị thật (tối đa 2 khung chờ) nên độ trễ không còn tích lũy.
+- Sửa lỗi chuột/bàn phím chết im lặng: mọi thao tác gửi lệnh điều khiển nay có thời gian chờ tối đa 5 giây — nếu đường gửi bị kẹt, app báo lỗi rõ ràng và cho bật lại điều khiển thay vì treo không dấu hiệu.
+- Phát hiện đường chuyển tiếp chết một chiều: app đã có tín hiệu thăm dò tới máy đích trong mỗi phiên; bản này dùng luôn tín hiệu đó làm cổng sức khoẻ — nếu máy đích ngừng trả lời thăm dò trong khi kênh relay vẫn sống, app tự kết nối lại thay vì để phiên "sống mà không điều khiển được".
+- Ngân sách làm mới màn hình sau lỗi giải mã nay được tính theo từng phiên kết nối (không cộng dồn suốt vòng đời app), và trạng thái phím/chuột đang giữ được đồng bộ lại sau mỗi lần tự kết nối lại.
+- Cách cập nhật: máy đang chạy 4.0.1 sẽ thấy bản 4.0.2 qua kiểm tra cập nhật trong app — bấm **Cập nhật và khởi động lại**, app tự tải, đối chiếu SHA-256, cài đè và mở lại, không có cảnh báo "nhà phát triển chưa xác định".
 
 **Cài thủ công lần đầu:** xem file Readme-macOS.txt đính kèm kèm release này (bỏ qua mục 2 nếu không dùng bản 1.0).
 
@@ -16,15 +17,16 @@ CI: toàn bộ test chạy trước khi đóng gói. Đối chiếu bản tải 
 
 ## Bản Linux
 
-Bản Linux hiện ở bản dựng 4.0, đính kèm tại release 4.0 trên trang Releases; các sửa lỗi giao thức của 4.0.1 sẽ được đồng bộ sang Linux ở bước tiếp theo.
+Bản Linux 4.0.2 (đồng bộ đầy đủ các sửa lỗi trên) đính kèm tại release này: `MacViewer-Ventura-4.0.2-Linux.tar.gz` và `MacViewer-Ventura-4.0.2-Linux-amd64.deb`, mỗi file kèm một file `.sha256`.
 
 ## English
 
 **Main changes**
-- Fixed sessions dropping while idle: the app now detects a silently dead connection (previously a session could be dead underneath without the app noticing), every send is time-bounded, keepalives run evenly on both channels with TCP keepalive enabled, the app holds the session against App Nap throttling while idle, and a dropped connection now reconnects automatically (with backoff, over about two minutes) instead of ending the session.
-- Sessions survive processing overload: rather than ending the session, the app now sheds excess frames; isolated screen-decode errors are tolerated and recover instead of killing the session.
-- Release assets renamed for clarity: Mac builds carry the -macOS suffix and the checksum file is now SHA256SUMS-macOS.txt.
-- How to update: a machine running 4.0 will see 4.0.1 through the in-app update check — click **Update and Restart**; the app downloads it, verifies the SHA-256, installs in place and relaunches, with no "unidentified developer" prompt.
+- Fixed progressive lag and dead control in long sessions (field report on 4.0.1): decoded frames that had not been displayed yet used to pile into an ever-growing queue — the picture kept moving but fell further behind, and every click had to wait out the queue. This release keeps only the newest frame for display (older ones are dropped and counted) and paces frame acknowledgements to the real presentation rate (at most 2 frames in flight), so latency can no longer accumulate.
+- Fixed silent mouse/keyboard death: every control send is now bounded by a 5-second timeout — if the send path wedges, the app reports a clear error and lets you re-enable control instead of hanging without a trace.
+- Detects a one-way-dead forwarding path: the app already probes the host every session; this release uses that probe as a health gate — if the host stops answering probes while the relay channel stays alive, the app reconnects instead of leaving a session that "looks alive but takes no input".
+- The screen-refresh budget after decode errors is now per connection session (not accumulated over the app's lifetime), and held key/mouse state is resynchronised after every automatic reconnect.
+- How to update: a machine running 4.0.1 will see 4.0.2 through the in-app update check — click **Update and Restart**; the app downloads it, verifies the SHA-256, installs in place and relaunches, with no "unidentified developer" prompt.
 
 **First manual install:** see the Readme-macOS.txt attached to this release (skip section 2 unless you use release 1.0).
 
@@ -34,4 +36,4 @@ CI: the full test suite runs before packaging. Verify downloads with SHA256SUMS-
 
 ## Linux build
 
-The Linux build is currently at version 4.0, attached to the 4.0 release on the Releases page; the 4.0.1 protocol fixes will be synced to Linux next.
+The Linux 4.0.2 build (with all of the fixes above synced) is attached to this release: `MacViewer-Ventura-4.0.2-Linux.tar.gz` and `MacViewer-Ventura-4.0.2-Linux-amd64.deb`, each with a `.sha256` sidecar.

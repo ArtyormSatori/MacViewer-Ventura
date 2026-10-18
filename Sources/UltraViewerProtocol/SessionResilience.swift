@@ -187,6 +187,143 @@ public enum SessionSendRace {
     }
 }
 
+/// Credit-style pacing for decoded screen frames (LAG_AUDIT FX-2).
+///
+/// The host paces production on the viewer's frame ACK ("18"), but the
+/// session used to ACK at *decode* rate while the app presents at the
+/// MainActor's rate — so under a busy remote screen the decoded-but-
+/// unpresented backlog grew without bound and every click's visible
+/// effect queued behind it. This gate counts frames that have been
+/// decoded and emitted but not yet consumed by the presentation side;
+/// the session withholds the ACK while the count is above `bound`,
+/// which throttles production at the source instead of letting doomed
+/// frames burn decode time. Consumption signals arrive through
+/// `UltraViewerRelaySession.noteFrameConsumed()` from the adapter as
+/// the app takes each frame off the presentation stream.
+///
+/// Deadlock note: if the consumer stalls entirely, no consumption
+/// signals arrive, the session stops ACKing, inbound processing parks
+/// behind the withheld ACK, and the existing reply watchdog / forward-
+/// path gate declare the leg dead within their window and run the
+/// normal reconnect-or-finish path — a stalled presentation surfaces
+/// instead of hanging silently.
+public struct FramePacingGate: Equatable, Sendable {
+    /// Maximum decoded-but-unpresented frames tolerated before the
+    /// frame ACK is withheld.
+    public var bound: Int
+    public private(set) var inFlight = 0
+
+    public init(bound: Int = 2) {
+        self.bound = bound
+    }
+
+    public mutating func noteFrameDecoded() {
+        inFlight += 1
+    }
+
+    public mutating func noteFrameConsumed() {
+        inFlight = max(0, inFlight - 1)
+    }
+
+    /// `true` while too many decoded frames are still awaiting
+    /// presentation and the ACK for the latest frame must be withheld.
+    public var shouldWithholdAcknowledgement: Bool { inFlight > bound }
+
+    public mutating func reset() {
+        inFlight = 0
+    }
+}
+
+/// Per-episode screen-refresh budget for tolerated decode failures
+/// (LAG_AUDIT FX-6 / G-2).
+///
+/// The budget used to be the *lifetime* `Diagnostics.screenRefreshes`
+/// counter, which survives auto-reconnects (teardown preserves
+/// diagnostics on purpose), so a long session silently used up its
+/// tolerance and a routine decode hiccup hours in became fatal. This
+/// counter is consulted by the decode-error guard and reset on every
+/// successful session (re-)initialisation (command 0 → `.active`), so
+/// each connection episode gets the full budget. Diagnostics keep
+/// counting lifetime refreshes separately for observability.
+public struct SessionRefreshBudget: Equatable, Sendable {
+    /// Refreshes tolerated within one connection episode.
+    public var limit: Int
+    public private(set) var used = 0
+
+    public init(limit: Int = 2) {
+        self.limit = limit
+    }
+
+    /// Records one decode-error refresh. Returns `false` when the
+    /// episode budget is exhausted and the failure must become fatal.
+    @discardableResult
+    public mutating func consume() -> Bool {
+        guard used < limit else { return false }
+        used += 1
+        return true
+    }
+
+    /// A successful (re-)initialisation restores the full budget.
+    public mutating func reset() {
+        used = 0
+    }
+}
+
+/// Health of the viewer's *forward* path to the host (LAG_AUDIT FX-4).
+///
+/// The reply watchdog stamps liveness on inbound traffic only, so a
+/// path that dies in the outbound direction — the relay stops
+/// forwarding viewer→host envelopes, or the host stops consuming them —
+/// is invisible while video keeps flowing: local sends "succeed", the
+/// watchdog is fed by frames, and input is dead. The session already
+/// probes this path every heartbeat with the host ping "20"; this
+/// tracker records the probe's replies next to the relay's own "pong"
+/// replies (which travel the same viewer→relay connection but not the
+/// relay→host forward hop). The forward path is declared dead only
+/// when BOTH hold over a full watchdog window: pings were sent and no
+/// "20" reply came back, *while* relay pongs kept arriving — the two
+/// signals together separate "forward hop dead" from "everything
+/// dead" (the watchdog's case) and from a host that is merely slow.
+/// A path that has never once answered "20" is not judged: it is
+/// indistinguishable from a host that does not answer pings at all.
+public struct PeerForwardPathHealth: Equatable, Sendable {
+    /// Uptime nanoseconds of the most recent host "20" reply.
+    public private(set) var lastPeerPingReplyUptimeNanoseconds: UInt64?
+    /// Uptime nanoseconds of the most recent relay "pong".
+    public private(set) var lastRelayPongUptimeNanoseconds: UInt64?
+    /// Uptime nanoseconds of the first ping sent since the last reply.
+    private var unansweredPingSinceUptimeNanoseconds: UInt64?
+
+    public init() {}
+
+    public mutating func notePeerPingSent(at uptimeNanoseconds: UInt64) {
+        if unansweredPingSinceUptimeNanoseconds == nil {
+            unansweredPingSinceUptimeNanoseconds = uptimeNanoseconds
+        }
+    }
+
+    public mutating func notePeerPingReply(at uptimeNanoseconds: UInt64) {
+        lastPeerPingReplyUptimeNanoseconds = uptimeNanoseconds
+        unansweredPingSinceUptimeNanoseconds = nil
+    }
+
+    public mutating func noteRelayPong(at uptimeNanoseconds: UInt64) {
+        lastRelayPongUptimeNanoseconds = uptimeNanoseconds
+    }
+
+    /// `true` when pings have gone unanswered for longer than `window`
+    /// even though relay pongs arrived within that window, on a path
+    /// that has answered at least once before.
+    public func isForwardPathDead(at uptimeNanoseconds: UInt64, window: UInt64) -> Bool {
+        guard lastPeerPingReplyUptimeNanoseconds != nil,
+              let unansweredSince = unansweredPingSinceUptimeNanoseconds,
+              uptimeNanoseconds &- unansweredSince > window,
+              let lastPong = lastRelayPongUptimeNanoseconds,
+              uptimeNanoseconds &- lastPong <= window else { return false }
+        return true
+    }
+}
+
 /// Exactly-once resumption for the send race: whichever side finishes
 /// first resumes the continuation; the other side's late result is dropped.
 private final class RaceGate: @unchecked Sendable {
