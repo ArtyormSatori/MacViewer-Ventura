@@ -1,8 +1,8 @@
-# Feature roadmap · Lộ trình tính năng bổ sung (repo owner's request · yêu cầu của chủ repo, 2026-10-18)
+# Lộ trình tính năng · Feature roadmap
 
 Nguyên tắc trung thực kỹ thuật: MacViewer nói chuyện bằng **giao thức UltraViewer** qua máy chủ trung gian của UltraViewer. Tính năng nào phụ thuộc cả hai đầu dây thì chỉ làm được trọn vẹn khi đầu kia cũng là MacViewer (Mac↔Mac); đầu kia là UltraViewer trên Windows thì bị trần của chính giao thức UltraViewer. Từng mục dưới đây ghi rõ trần đó.
 
-## Giai đoạn A — phía client, làm được ngay trên nền bản Ventura
+## Giai đoạn A — phía client, làm được ngay
 
 1. **Truy cập không cần người ngồi máy (unattended)** — ✅ ĐÃ LÀM (nhánh stage-a)
    Làm rõ cơ chế: phía host vốn đã tự xác minh bằng chứng mật khẩu của người kết nối (thử thách nonce trong `UltraViewerHostSession`) TRƯỚC khi hiện yêu cầu lên màn hình — nút Duyệt chỉ là lớp đồng ý thứ hai. Vì vậy trên giao thức legacy không có mật khẩu thứ hai riêng; unattended = tự duyệt sau khi bằng chứng mật khẩu đã khớp. Đã bổ sung: công tắc trong Cài đặt (bật/tắt, cho điều khiển hay chỉ xem), tự khởi động chia sẻ khi mở app nếu đang bật, Login Item (SMAppService, macOS 13+), và ngăn máy ngủ khi đang chia sẻ. Thiếu quyền (Quay màn hình/Tiếp cận) thì yêu cầu vẫn nằm chờ duyệt tay như cũ. Có unit test cho logic quyết định.

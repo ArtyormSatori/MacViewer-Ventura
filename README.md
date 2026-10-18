@@ -22,7 +22,7 @@ Tài liệu hai phần · Documentation in two parts: [Tiếng Việt](#tổng-q
 
 ## Tổng quan
 
-MacViewer Ventura là client macOS mã nguồn mở cho UltraViewer — phần mềm điều khiển máy tính từ xa chỉ có bản Windows. Fork này hạ yêu cầu hệ điều hành từ macOS 14 xuống **macOS 13** và bổ sung các thay đổi ở bảng "Khác bản gốc". Không phải sản phẩm chính thức của UltraViewer; chỉ kết nối tới máy bạn được phép truy cập.
+MacViewer Ventura là client macOS mã nguồn mở cho UltraViewer — phần mềm điều khiển máy tính từ xa chỉ có bản Windows. MacViewer Ventura chạy trên **macOS 13 Ventura trở lên** (Intel và Apple Silicon). Không phải sản phẩm chính thức của UltraViewer; chỉ kết nối tới máy bạn được phép truy cập.
 
 ## App làm gì
 
@@ -31,22 +31,19 @@ MacViewer Ventura là client macOS mã nguồn mở cho UltraViewer — phần m
 - **Đường truyền:** TLS qua relay của UltraViewer; hai máy cùng LAN thì kết nối trực tiếp.
 - **Phụ trợ:** chat, clipboard văn bản hai chiều, chụp màn hình + ghi chú, quay video phiên, nghe âm thanh của máy kia, lưu mật khẩu đối tác vào Keychain.
 
-## Khác bản gốc
+## Điểm nổi bật
 
-| Hạng mục | Bản gốc | Fork này |
-| --- | --- | --- |
-| Hệ điều hành | macOS 14+ | macOS 13+ (deployment target 13.0; API macOS 14 được thay thế hoặc bọc điều kiện) |
-| Chứng thư relay | Dùng kho hệ thống — Ventura thiếu gốc Sectigo R46, kết nối thất bại | Nhúng R46 làm trust anchor bổ sung; giữ nguyên neo hệ thống và ghim tên chứng thư |
-| Điều khiển từ xa | Mặc định tắt (chỉ xem) | Mặc định bật khi kết nối (máy host vẫn là bên quyết định quyền) |
-| Chất lượng hình | Mặc định Tự động (45), chỉ gửi khi người dùng đổi tay | Mặc định Ưu tiên chất lượng (70), tự gửi khi kết nối |
-| Cập nhật | Chiếu tới repo gốc | Trỏ về repo này; tự cài tại chỗ sau khi đối chiếu SHA-256 với bảng tổng công bố; gỡ quarantine khỏi bản mới nên không còn cảnh báo Gatekeeper (từ 3.0) |
-| Truy cập không người trực | Không có | Tự duyệt sau khi bằng chứng mật khẩu khớp; tuỳ chọn mở cùng lúc đăng nhập, chống ngủ khi chia sẻ (mặc định tắt) |
-| Bàn phím | Keycode US | Thêm VNI passthrough và văn bản Unicode (Cài đặt → Bàn phím) |
-| Hình phía host | Cắt cụt về RGB555; chụp cố định mỗi 250 ms | Dithering Bayer 4×4; nhịp chụp thích ứng 50–1000 ms |
-| Lưu mật khẩu | Keychain theo mặc định nền tảng | `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` |
-| Tên / phiên bản | MacViewer | **MacViewer Ventura** / 4.0 trở đi (dãy phiên bản riêng của fork) |
+- **Chạy trên macOS 13 Ventura** (deployment target 13.0) — Intel và Apple Silicon.
+- **Chứng thư relay nhúng sẵn:** chứng thư gốc Sectigo R46 được nhúng làm trust anchor bổ sung, nên máy Ventura kết nối relay ngay mà không cần nạp chứng thư thủ công; neo hệ thống và cơ chế ghim tên chứng thư giữ nguyên.
+- **Điều khiển bật mặc định** khi kết nối (máy host vẫn là bên quyết định quyền).
+- **Chất lượng hình Ưu tiên chất lượng (70)** tự áp dụng khi kết nối.
+- **Tự cập nhật trong app:** đối chiếu SHA-256 với bảng tổng công bố, cài đè tại chỗ và tự mở lại; không còn cảnh báo Gatekeeper đối với bản cài qua app (từ 3.0).
+- **Truy cập không người trực** (mặc định tắt): tự duyệt sau khi bằng chứng mật khẩu khớp; tuỳ chọn mở cùng lúc đăng nhập và chống ngủ khi chia sẻ.
+- **Bàn phím:** keycode US, VNI passthrough, văn bản Unicode (Cài đặt → Bàn phím).
+- **Hình phía host:** dithering Bayer 4×4; nhịp chụp thích ứng 50–1000 ms.
+- **Mật khẩu đối tác** lưu Keychain với mức `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`.
 
-Chi tiết kỹ thuật bản vá Ventura: [VENTURA.md](VENTURA.md).
+Chi tiết kỹ thuật: [VENTURA.md](VENTURA.md).
 
 ## Giới hạn
 
@@ -71,7 +68,7 @@ App tự kiểm tra bản mới tại repo này. Khi có bản mới, bấm **C�
 ## Tài liệu
 
 - [readme.txt](readme.txt) — cài đặt, cấp quyền, sử dụng
-- [VENTURA.md](VENTURA.md) — chi tiết kỹ thuật bản vá Ventura
+- [VENTURA.md](VENTURA.md) — chi tiết kỹ thuật
 - [SECURITY_AUDIT.md](SECURITY_AUDIT.md) — rà soát bảo mật
 - [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md) — lộ trình tính năng, giới hạn đã đo
 
@@ -85,7 +82,9 @@ Không thu thập dữ liệu. Kiểm tra cập nhật chỉ đọc thông tin c
 
 ## Giấy phép
 
-MIT, giữ nguyên của dự án gốc. Thư viện bên thứ ba giữ giấy phép riêng: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). File `8bit.dat` là dữ liệu của UltraViewer, không thuộc MIT. UltraViewer là thương hiệu của chủ sở hữu tương ứng.
+Dựa trên dự án mã nguồn mở MacViewer của DeanOpen.
+
+Giấy phép MIT — xem [LICENSE](LICENSE). Thư viện bên thứ ba giữ giấy phép riêng: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). File `8bit.dat` là dữ liệu của UltraViewer, không thuộc MIT. UltraViewer là thương hiệu của chủ sở hữu tương ứng.
 
 ---
 
@@ -93,7 +92,7 @@ MIT, giữ nguyên của dự án gốc. Thư viện bên thứ ba giữ giấy 
 
 ## Overview
 
-MacViewer Ventura is an open-source macOS client for UltraViewer — remote-control software that ships for Windows only. This fork lowers the OS requirement from macOS 14 to **macOS 13** and adds the changes in the "Differences from upstream" table. Not an official UltraViewer product; connect only to machines you are permitted to access.
+MacViewer Ventura is an open-source macOS client for UltraViewer — remote-control software that ships for Windows only. MacViewer Ventura runs on **macOS 13 Ventura and later** (Intel and Apple Silicon). Not an official UltraViewer product; connect only to machines you are permitted to access.
 
 ## What the app does
 
@@ -102,22 +101,19 @@ MacViewer Ventura is an open-source macOS client for UltraViewer — remote-cont
 - **Transport:** TLS via UltraViewer's relay; machines on the same LAN connect directly.
 - **Extras:** chat, two-way text clipboard, screenshot + annotation, session video recording, remote audio playback, partner passwords stored in Keychain.
 
-## Differences from upstream
+## Highlights
 
-| Area | Upstream | This fork |
-| --- | --- | --- |
-| Operating system | macOS 14+ | macOS 13+ (deployment target 13.0; macOS 14 APIs replaced or availability-gated) |
-| Relay certificate | System trust store — Ventura lacks the Sectigo R46 root, connection fails | R46 bundled as an additional trust anchor; system anchors and certificate-name pinning unchanged |
-| Remote control | Off by default (view only) | On by default at connect (the host machine still decides permission) |
-| Image quality | Default Automatic (45), sent only when the user changes it | Default Prefer quality (70), sent automatically at connect |
-| Updates | Points at the upstream repo | Points at this repo; installs in place after matching the SHA-256 against the published checksum file; quarantine stripped from the staged copy, so no Gatekeeper prompt (from 3.0) |
-| Unattended access | Not available | Auto-approves after the password proof matches; optional launch at login, sleep prevention while sharing (off by default) |
-| Keyboard | US keycode | Adds VNI passthrough and Unicode text (Settings → Keyboard) |
-| Host image | Truncated to RGB555; fixed 250 ms capture | Bayer 4×4 dithering; adaptive capture pacing 50–1000 ms |
-| Password storage | Keychain with platform defaults | `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` |
-| Name / version | MacViewer | **MacViewer Ventura** / 4.0 and later (the fork's own version series) |
+- **Runs on macOS 13 Ventura** (deployment target 13.0) — Intel and Apple Silicon.
+- **Relay certificate bundled:** the Sectigo R46 root is embedded as an additional trust anchor, so Ventura machines connect to the relay with no manual certificate step; system anchors and certificate-name pinning are unchanged.
+- **Control on by default** at connect (the host machine still decides permission).
+- **Prefer-quality image (70)** applied automatically at connect.
+- **In-app updates:** the download is matched against the published SHA-256 checksums, installed in place and relaunched; no Gatekeeper prompt for app-installed updates (from 3.0).
+- **Unattended access** (off by default): auto-approves once the password proof matches; optional launch at login and sleep prevention while sharing.
+- **Keyboard:** US keycode, VNI passthrough, Unicode text (Settings → Keyboard).
+- **Host image:** Bayer 4×4 dithering; adaptive capture pacing 50–1000 ms.
+- **Partner passwords** stored in Keychain with `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`.
 
-Ventura patch technical details: [VENTURA.md](VENTURA.md).
+Technical details: [VENTURA.md](VENTURA.md).
 
 ## Limits
 
@@ -142,7 +138,7 @@ The app checks this repo for new versions. When one is available, click **Update
 ## Documentation
 
 - [readme.txt](readme.txt) — install, permissions, usage
-- [VENTURA.md](VENTURA.md) — Ventura patch technical details
+- [VENTURA.md](VENTURA.md) — technical details
 - [SECURITY_AUDIT.md](SECURITY_AUDIT.md) — security audit
 - [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md) — feature roadmap, measured limits
 
@@ -156,4 +152,6 @@ No data collection. Update checks only read public information on GitHub (can be
 
 ## License
 
-MIT, unchanged from upstream. Third-party libraries keep their own licenses: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The `8bit.dat` file is UltraViewer data and is not covered by MIT. UltraViewer is a trademark of its respective owner.
+Based on the open-source MacViewer project by DeanOpen.
+
+MIT license — see [LICENSE](LICENSE). Third-party libraries keep their own licenses: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The `8bit.dat` file is UltraViewer data and is not covered by MIT. UltraViewer is a trademark of its respective owner.
