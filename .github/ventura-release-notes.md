@@ -14,6 +14,11 @@ CI: toàn bộ test chạy trước khi đóng gói. Đối chiếu bản tải 
 
 ---
 
+
+## Bản Linux
+
+Release này kèm bản viewer cho Linux (Ubuntu 24.04, x86_64): file `MacViewer-Ventura-Linux.tar.gz` (giải nén là chạy) hoặc gói `.deb`. Các gói phụ thuộc lúc chạy được liệt kê trong `README-Linux.txt` nằm trong gói.
+
 ## English
 
 **Main changes**
@@ -27,3 +32,7 @@ CI: toàn bộ test chạy trước khi đóng gói. Đối chiếu bản tải 
 If macOS shows the "unidentified developer" warning on the first launch after a manual install, run this once in Terminal: `xattr -dr com.apple.quarantine /Applications/MacViewer.app` — or open the app with right-click → Open.
 
 CI: the full test suite runs before packaging. Verify downloads with SHA256SUMS-Ventura.txt.
+
+## Linux build
+
+This release also includes the Linux viewer (Ubuntu 24.04, x86_64): `MacViewer-Ventura-Linux.tar.gz` (extract and run) or the `.deb` package. Runtime dependencies are listed in `README-Linux.txt` inside the package.
