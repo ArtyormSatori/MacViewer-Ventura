@@ -28,7 +28,20 @@ Repo này là bản fork của [DeanOpen/MacViewer](https://github.com/DeanOpen/
 > [!IMPORTANT]
 > Đây là dự án mã nguồn mở, **không phải** sản phẩm chính thức của UltraViewer và không liên quan đến đội ngũ phát triển UltraViewer. Chỉ kết nối tới những máy mà bạn được phép truy cập.
 
-## Điểm khác so với bản gốc
+## Ứng dụng gốc: MacViewer của DeanOpen là gì?
+
+**MacViewer** là ứng dụng macOS mã nguồn mở do **DeanOpen** phát triển, đưa khả năng của UltraViewer — phần mềm điều khiển máy tính từ xa vốn **chỉ có trên Windows** — lên máy Mac, mà không cần Wine hay chạy file `.exe` nào.
+
+App dùng để làm gì:
+
+- **Điều khiển máy khác từ máy Mac của bạn:** nhập **ID và mật khẩu** đang hiển thị trên UltraViewer (hoặc MacViewer) của máy kia là bạn thấy màn hình của họ và điều khiển được chuột, bàn phím — như đang ngồi trước máy đó. Đây là cách phổ biến để hỗ trợ kỹ thuật, sửa máy từ xa cho người thân, đồng nghiệp.
+- **Cho người khác truy cập máy Mac của bạn:** khi bạn cho phép, người kia xem được màn hình máy Mac của bạn và điều khiển nó, sau khi bạn bấm đồng ý trên máy của mình.
+- Kết nối được **mã hóa** và đi qua máy chủ trung gian (relay) của UltraViewer; hai máy cùng mạng LAN thì kết nối trực tiếp cho nhanh.
+- Kèm theo: **chat** với người bên kia, **đồng bộ clipboard** văn bản hai chiều, chụp màn hình có ghi chú, **quay video** phiên điều khiển, và lưu mật khẩu đối tác vào **Keychain** của macOS cho lần kết nối sau.
+
+Dự án gốc: [github.com/DeanOpen/MacViewer](https://github.com/DeanOpen/MacViewer) — bản gốc (0.3.4) yêu cầu **macOS 14 Sonoma trở lên**. Toàn bộ phần giao thức, giao diện và tính năng nền của app là công sức của tác giả gốc; bản fork này đứng trên đó và chỉ thay đổi những gì cần thiết cho Ventura cùng vài cải tiến bên dưới.
+
+## Bản fork MacViewer Ventura thêm gì, sửa gì
 
 - **Tên và số phiên bản riêng, dễ nhớ**: app mang tên **MacViewer Ventura** và dùng dãy phiên bản riêng **4.0, 4.1, …** — mỗi lần cập nhật là một số phiên bản mới rõ ràng. (Ba bản đầu từng phát hành dưới tên ventura.1/.2/.3; nền kỹ thuật bên dưới vẫn là MacViewer 0.3.4 của DeanOpen.)
 - **Chạy được trên macOS 13 Ventura** (bản gốc đòi macOS 14).

@@ -1,6 +1,6 @@
-# Hướng dẫn cài đặt và sử dụng MacViewer cho macOS 13 Ventura
+# Hướng dẫn cài đặt và sử dụng MacViewer Ventura
 
-Bản này là MacViewer 0.3.4 được vá để chạy trên **macOS 13 Ventura** (bản gốc yêu cầu macOS 14 trở lên). Hỗ trợ cả máy Intel và Apple Silicon.
+**App này dùng để làm gì?** MacViewer Ventura là ứng dụng điều khiển máy tính từ xa cho máy Mac: từ máy Mac của bạn, bạn kết nối tới một máy đang chạy **UltraViewer** (thường là máy Windows) bằng ID và mật khẩu để xem màn hình và điều khiển máy đó — và ngược lại, người khác cũng có thể truy cập máy Mac của bạn sau khi bạn đồng ý. App là bản fork của [MacViewer 0.3.4 của DeanOpen](https://github.com/DeanOpen/MacViewer) được vá để chạy trên **macOS 13 Ventura** (bản gốc yêu cầu macOS 14 trở lên). Hỗ trợ cả máy Intel và Apple Silicon.
 
 ## 1. Tải và cài đặt
 
