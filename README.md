@@ -98,10 +98,10 @@ App tự kiểm tra bản mới tại repo này. Khi có bản mới, bấm **C�
 
 ### Giới hạn
 
-- Không truyền file: giao thức UltraViewer không có lệnh truyền file (đang làm cho trường hợp Mac↔Mac, xem [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md)).
-- Màu hình giới hạn ở RGB555 + atlas JPEG theo giao thức; không có video H.264/UDP kiểu RustDesk.
-- Máy Ventura làm host: ảnh chụp không kèm con trỏ chuột (giới hạn API cũ).
-- App ký ad-hoc: lần cài đầu tiên mở bằng chuột phải → Open; cập nhật trong app thì không cần.
+- **Không truyền file:** UltraViewer hiện chưa hỗ trợ truyền file trong giao thức của nó, nên app không gửi được file tới máy đang chạy UltraViewer. Tính năng truyền file đang được làm riêng cho trường hợp cả hai máy cùng chạy MacViewer Ventura (Mac↔Mac), xem [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md).
+- **Màu hình bị giới hạn bởi giao thức:** UltraViewer truyền hình bằng màu RGB555 và ảnh JPEG, nên độ nét không thể bằng các phần mềm dùng luồng video H.264/UDP như RustDesk.
+- **Khi máy Mac làm máy được điều khiển (host):** ảnh màn hình gửi đi không kèm con trỏ chuột, do giới hạn của API chụp hình trên macOS 13.
+- **App được ký dạng ad-hoc:** lần cài thủ công đầu tiên phải mở bằng chuột phải → Open; các bản cập nhật cài qua app thì không cần bước này.
 
 ### Báo lỗi & giúp kiểm thử
 
@@ -211,10 +211,10 @@ The app checks this repo for new versions. When one is available, click **Update
 
 ### Limits
 
-- No file transfer: the UltraViewer protocol has no file-transfer command (in progress for the Mac↔Mac case, see [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md)).
-- Image color limited to RGB555 + JPEG atlas per the protocol; no RustDesk-style H.264/UDP video.
-- Ventura as host: captured frames do not include the mouse cursor (legacy API limitation).
-- Ad-hoc signed: first manual install opens via right-click → Open; in-app updates do not need this.
+- **No file transfer:** UltraViewer does not currently support file transfer in its protocol, so the app cannot send files to a machine running UltraViewer. File transfer is being built separately for the case where both machines run MacViewer Ventura (Mac↔Mac), see [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md).
+- **Image color is limited by the protocol:** UltraViewer sends its picture as RGB555 color and JPEG images, so sharpness cannot match software that streams H.264/UDP video like RustDesk.
+- **When the Mac is the controlled machine (host):** the screen picture sent out does not include the mouse cursor, due to a limitation of the macOS 13 capture API.
+- **The app is ad-hoc signed:** the first manual install must be opened via right-click → Open; updates installed through the app do not need this step.
 
 ### Reporting bugs & helping test
 
