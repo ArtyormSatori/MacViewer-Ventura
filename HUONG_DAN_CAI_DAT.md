@@ -4,7 +4,7 @@ Bản này là MacViewer 0.3.4 được vá để chạy trên **macOS 13 Ventur
 
 ## 1. Tải và cài đặt
 
-1. Vào trang [Releases](https://github.com/ArtyormSatori/MacViewer-Ventura/releases) và tải bản mới nhất. Khuyến nghị dùng file **ZIP** (`MacViewer-0.3.4-Ventura.zip`).
+1. Vào trang [Releases](https://github.com/ArtyormSatori/MacViewer-Ventura/releases) và tải bản mới nhất. Khuyến nghị dùng file **ZIP** (`MacViewer-Ventura-4.0.zip`).
 2. Giải nén, kéo **MacViewer.app** vào thư mục **Applications**.
 3. Mở lần đầu bằng **chuột phải → Open** (app ký ad-hoc nên macOS Gatekeeper sẽ chặn nếu mở bằng nhấp đúp). Nếu vẫn bị chặn, chạy trong Terminal:
    `xattr -dr com.apple.quarantine /Applications/MacViewer.app`

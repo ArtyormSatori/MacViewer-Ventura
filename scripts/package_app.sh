@@ -65,8 +65,8 @@ cat > "$app_directory/Contents/Info.plist" <<PLIST
 <dict>
   <key>CFBundleExecutable</key><string>MacViewer</string>
   <key>CFBundleIdentifier</key><string>dev.macviewer.app</string>
-  <key>CFBundleName</key><string>MacViewer</string>
-  <key>CFBundleDisplayName</key><string>MacViewer</string>
+  <key>CFBundleName</key><string>MacViewer Ventura</string>
+  <key>CFBundleDisplayName</key><string>MacViewer Ventura</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleIconFile</key><string>MacViewer.icns</string>
   <key>CFBundleDevelopmentRegion</key><string>en</string>

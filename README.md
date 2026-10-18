@@ -2,7 +2,7 @@
 
 <img src="docs/images/app-icon.png" width="128" alt="Biểu tượng MacViewer">
 
-# MacViewer cho macOS 13 Ventura
+# MacViewer Ventura
 
 **Điều khiển máy Windows chạy UltraViewer ngay từ máy Mac Ventura của bạn — và cho người khác truy cập máy Mac của bạn khi bạn đồng ý.**
 
@@ -30,6 +30,7 @@ Repo này là bản fork của [DeanOpen/MacViewer](https://github.com/DeanOpen/
 
 ## Điểm khác so với bản gốc
 
+- **Tên và số phiên bản riêng, dễ nhớ**: app mang tên **MacViewer Ventura** và dùng dãy phiên bản riêng **4.0, 4.1, …** — mỗi lần cập nhật là một số phiên bản mới rõ ràng. (Ba bản đầu từng phát hành dưới tên ventura.1/.2/.3; nền kỹ thuật bên dưới vẫn là MacViewer 0.3.4 của DeanOpen.)
 - **Chạy được trên macOS 13 Ventura** (bản gốc đòi macOS 14).
 - **Không cần nạp chứng thư vào Keychain nữa**: chứng thư gốc Sectigo R46 mà máy chủ UltraViewer dùng (kho tin cậy của Ventura chưa có) đã được nhúng sẵn trong app — cài là kết nối được ngay.
 - **Điều khiển bật sẵn**: kết nối tới máy Windows là điều khiển được ngay, không phải bật tay công tắc Điều khiển nữa (máy kia vẫn là bên quyết định cho phép hay không).
@@ -67,12 +68,12 @@ Repo này là bản fork của [DeanOpen/MacViewer](https://github.com/DeanOpen/
 
 Hướng dẫn đầy đủ, có hình dung từng bước: **[HUONG_DAN_CAI_DAT.md](HUONG_DAN_CAI_DAT.md)**. Tóm tắt:
 
-1. Vào trang [**Releases**](https://github.com/ArtyormSatori/MacViewer-Ventura/releases/latest) và tải file `MacViewer-0.3.4-Ventura.dmg` (hoặc `.zip`).
+1. Vào trang [**Releases**](https://github.com/ArtyormSatori/MacViewer-Ventura/releases/latest) và tải file `MacViewer-Ventura-<phiên bản>.dmg` (hoặc `.zip`).
 2. Mở file DMG, kéo **MacViewer** thả vào thư mục **Applications**.
 3. Lần đầu mở: nhấp **chuột phải** vào MacViewer → **Open** → **Open** (bản build ký ad-hoc nên macOS hỏi một lần). Hoặc chạy lệnh: `xattr -dr com.apple.quarantine /Applications/MacViewer.app`
 4. Cấp quyền **Ghi màn hình** và **Trợ năng** khi app hướng dẫn (chỉ cần khi bạn cho người khác truy cập máy Mac của bạn).
 
-Từ bản ventura.3 trở đi, khi có bản mới app sẽ tự báo và tự cài — bạn không cần lặp lại các bước trên.
+Từ bản ventura.3 trở đi, khi có bản mới app sẽ tự báo và tự cài — bạn không cần lặp lại các bước trên. Bản 4.0 này chính là bản cập nhật đầu tiên được giao qua cơ chế đó cho máy đã cài ventura.3.
 
 ## Tài liệu
 

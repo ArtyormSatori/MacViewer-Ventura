@@ -1,12 +1,13 @@
-## MacViewer 0.3.4 cho macOS Ventura — v0.3.4-ventura.3
+## MacViewer Ventura — phiên bản 4.0
 
-Bản cập nhật + tương thích cho macOS 13 Ventura (Intel + Apple Silicon).
+Từ bản này, bản fork mang tên **MacViewer Ventura** và dùng dãy số phiên bản riêng **4.0, 4.1, …** cho dễ nhớ — mỗi lần cập nhật là một phiên bản mới rõ ràng. (Ba bản đầu phát hành dưới tên ventura.1, ventura.2, ventura.3; nền kỹ thuật vẫn là MacViewer 0.3.4 của DeanOpen, chạy trên macOS 13 Ventura, Intel + Apple Silicon.)
 
 **Có gì mới trong bản này**
-- Đã sửa cơ chế tự cập nhật cho bản fork: khi có bản Ventura mới hơn, app nay tự nhận ra, tải về, đối chiếu file DMG với mã SHA-256 đã công bố, cài đè tại chỗ và tự mở lại — các bản cập nhật cài theo cách này sẽ không còn gặp cảnh báo "nhà phát triển chưa xác định". (Riêng việc cài ventura.3 lần này vẫn cần mở tay một lần bằng chuột phải → Open; mọi bản cập nhật sau đó đều tự động trơn tru.)
-- Mặc định cho chiều điều khiển máy Windows chạy UltraViewer: điều khiển bật sẵn ngay khi phiên kết nối, và mức chất lượng hình "Ưu tiên chất lượng" (70) được áp dụng tự động khi kết nối.
-- Toàn bộ nội dung của ventura.2: chứng thư gốc Sectigo R46 nhúng sẵn (không cần nạp Keychain), truy cập không cần người ngồi máy, chế độ gõ VNI/Unicode, dithering Bayer, nhịp chụp màn hình thích ứng phía máy chủ.
+- Tên hiển thị của app đổi thành **MacViewer Ventura** (trong Finder, Launchpad, Dock và menu).
+- Số phiên bản của app là **4.0** — từ nay nhìn số phiên bản là biết ngay bản nào mới hơn.
+- Đây là bản cập nhật đầu tiên được giao qua cơ chế **tự cập nhật trong app** của ventura.3: nếu máy bạn đang chạy ventura.3, app sẽ tự báo có bản 4.0, bạn chỉ cần bấm **Cập nhật và khởi động lại** — app tự tải, đối chiếu mã SHA-256, cài đè và mở lại, không còn cảnh báo "nhà phát triển chưa xác định".
+- Giữ nguyên toàn bộ tính năng của ventura.3: chứng thư gốc Sectigo R46 nhúng sẵn, điều khiển bật sẵn + chất lượng Ưu tiên tự áp dụng khi điều khiển máy Windows, truy cập không cần người ngồi máy, gõ VNI/Unicode, dithering Bayer.
 
-**Cài đặt:** xem HUONG_DAN_CAI_DAT.md trong repo này; với bản này bạn bỏ qua được mục 2 (nạp chứng thư).
+**Cài đặt thủ công (lần đầu):** xem HUONG_DAN_CAI_DAT.md trong repo này; với các bản từ ventura.2 trở đi bạn bỏ qua được mục 2 (nạp chứng thư).
 
 Đã kiểm chứng bằng CI: toàn bộ test chạy trước khi đóng gói. Dùng SHA256SUMS-Ventura.txt để đối chiếu bản tải về.
