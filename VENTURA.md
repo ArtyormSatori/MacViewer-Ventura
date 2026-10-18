@@ -24,6 +24,7 @@ Mọi API dưới đây đều được đối chiếu với tài liệu chính 
 | `MacScreenCapture.swift` | `SCContentFilter.pointPixelScale`, `SCContentFilter.contentRect` | 14.0 | Lấy kích thước pixel từ CoreGraphics (`CGDisplayPixelsWide/High`) — `DisplayKey` vốn đã lưu sẵn hai giá trị này |
 | `MacScreenCapture.swift` | `SCStreamConfiguration.preservesAspectRatio` | 14.0 | Chỉ đặt khi `#available(macOS 14.0, *)` |
 | 4 file giao diện, 10 chỗ | `.onChange(of:) { _, new in … }` (closure hai tham số) | 14.0 | Quay về dạng một tham số `{ new in … }` (có từ macOS 11, vẫn biên dịch được trên 14+) |
+| `FramedTCPTransport.swift` | Kho chứng thư hệ thống của Ventura chưa có chứng thư gốc Sectigo R46 mà relay UltraViewer dùng (Apple bổ sung vào kho tin cậy từ macOS 14.4) — app kiểm chứng thư bằng kho hệ thống nên kết nối relay bị đánh rớt trên Ventura | 14.4 (kho chứng thư) | Nhúng chứng thư gốc R46 vào app, cộng thêm làm trust anchor khi kiểm chứng thư relay (vẫn giữ neo hệ thống và kiểm tra đúng tên chứng thư như bản gốc) |
 | `UpdateChecker.swift` | Tự kiểm tra cập nhật ở repo gốc | — | Trỏ về Releases của repo này, để app không tự "cập nhật" trở lại bản macOS 14 rồi hỏng tiếp |
 
 Các API còn lại đều tương thích Ventura (đã kiểm chứng):

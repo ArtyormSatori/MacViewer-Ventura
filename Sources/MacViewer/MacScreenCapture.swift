@@ -45,6 +45,26 @@ enum MacScreenCaptureError: LocalizedError, Equatable {
 /// Stateless conversion helpers are testable without requesting/capturing a
 /// screen. The transport encoder reverses these bottom-up rows into wire order.
 enum MacScreenPixels {
+    /// 4x4 Bayer ordered-dither matrix (values 0...15). The pattern is keyed
+    /// to the pixel's position on screen, so a static screen converts to the
+    /// exact same bytes every frame and the host's unchanged-frame skip
+    /// keeps working.
+    private static let bayer4: [[Int]] = [
+        [0, 8, 2, 10],
+        [12, 4, 14, 6],
+        [3, 11, 1, 9],
+        [15, 7, 13, 5],
+    ]
+
+    /// Maps an 8-bit channel to 5 bits. Plain truncation bands visibly on
+    /// gradients; scaling by 31/255 and letting the Bayer threshold decide
+    /// rounding per pixel renders gradients as a fine pattern instead, while
+    /// flat colors stay exact (0 and 255 are fixed points of the formula).
+    private static func quantize555(_ value: UInt8, x: Int, y: Int) -> UInt16 {
+        let threshold = bayer4[y & 3][x & 3] * 16 + 8
+        return UInt16(min(31, (Int(value) * 31 + threshold) / 255))
+    }
+
     static func scaledSize(width: Int, height: Int) throws -> (width: Int, height: Int) {
         guard width > 0, height > 0 else { throw MacScreenCaptureError.invalidFrame }
         let scale = min(1, min(1920 / Double(width), 1080 / Double(height)))
@@ -62,8 +82,9 @@ enum MacScreenPixels {
                 for y in 0..<height {
                     for x in 0..<width {
                         let input = y * bytesPerRow + x * 4
-                        let word = UInt16(source[input] >> 3) << 10
-                            | UInt16(source[input + 1] >> 3) << 5 | UInt16(source[input + 2] >> 3)
+                        let word = quantize555(source[input], x: x, y: y) << 10
+                            | quantize555(source[input + 1], x: x, y: y) << 5
+                            | quantize555(source[input + 2], x: x, y: y)
                         let output = ((height - 1 - y) * width + x) * 2
                         destination[output] = UInt8(truncatingIfNeeded: word)
                         destination[output + 1] = UInt8(word >> 8)

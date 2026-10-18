@@ -100,6 +100,7 @@ public actor UltraViewerHostSession {
     private var initializationID = UUID()
     private var controlRevision = UUID()
     private var captureTimer: Task<Void, Never>?
+    private var capturePacing = HostCapturePacing()
     private var events: AsyncThrowingStream<Event, any Swift.Error>.Continuation?
     private var peer: Peer?
     private var peerPhase = PeerPhase.none
@@ -157,9 +158,11 @@ public actor UltraViewerHostSession {
         captureTicket = nil
         if let previous = lastFrame, previous.width == frame.width, previous.height == frame.height,
            previous.rgb555BottomUp == frame.rgb555BottomUp {
+            capturePacing.frameUnchanged()
             scheduleCapture()
             return
         }
+        capturePacing.frameChanged()
         try await sendFrame(frame)
     }
 
@@ -474,8 +477,9 @@ public actor UltraViewerHostSession {
         guard peerPhase == .streaming, !waitingForAck, captureTicket == nil, let id = peer?.request.id else { return }
         captureTimer?.cancel()
         let token = generation
+        let delay = capturePacing.milliseconds
         captureTimer = Task { [weak self] in
-            do { try await Task.sleep(for: .milliseconds(250)); await self?.requestCapture(token: token, session: id) } catch {}
+            do { try await Task.sleep(for: .milliseconds(delay)); await self?.requestCapture(token: token, session: id) } catch {}
         }
     }
 
@@ -524,6 +528,7 @@ public actor UltraViewerHostSession {
         clipboardAllowed = false
         controlRevision = UUID(); initializationID = UUID()
         waitingForAck = false; captureTicket = nil; pendingFrame = nil; lastFrame = nil
+        capturePacing = HostCapturePacing()
         cancelViewerDeadline()
         captureTimer?.cancel(); captureTimer = nil
         try? emit(.releaseInput)

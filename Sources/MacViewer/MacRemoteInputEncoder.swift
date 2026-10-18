@@ -1,11 +1,46 @@
 import Foundation
 import UltraViewerProtocol
 
+/// How typed keys are put on the wire for a remote session.
+///
+/// - `keycode`: the recovered UltraViewer behaviour — physical US positions,
+///   with an ASCII character hint for plain text keys.
+/// - `vniPassthrough`: no character is ever attached, so the remote side
+///   injects pure key events; a VNI input method on the *remote* computer
+///   (for example Unikey in VNI mode) then composes tone marks from the raw
+///   letter and digit keys exactly as if they were typed locally. Keep this
+///   Mac's own input source on ABC/US while using it, so the local side does
+///   not compose first.
+/// - `unicodeText`: the composed character itself is sent (one UTF-16 code
+///   unit, which covers every precomposed Vietnamese character), for remotes
+///   that have no Vietnamese IME. Multi-unit characters fall back to the
+///   physical key.
+enum KeyboardInputMode: String, CaseIterable {
+    case keycode
+    case vniPassthrough
+    case unicodeText
+
+    static let defaultsKey = "MacViewer.keyboardMode"
+
+    static var current: KeyboardInputMode {
+        KeyboardInputMode(rawValue: UserDefaults.standard.string(forKey: defaultsKey) ?? "") ?? .keycode
+    }
+
+    var title: String {
+        switch self {
+        case .keycode: "US keycode (physical layout)"
+        case .vniPassthrough: "VNI passthrough (remote IME composes)"
+        case .unicodeText: "Unicode text (send composed characters)"
+        }
+    }
+}
+
 /// Session-local input state. The adapter must check authentication/input permission
 /// and send the returned application payloads in order, with the false format flag.
 /// See docs/mac-remote-input.md for the US mapping and character limitations.
 struct MacRemoteInputEncoder {
     let supportsBinaryKeyboard: Bool
+    let mode: KeyboardInputMode
 
     private var keys: [UInt16: HeldKey] = [:]
     private var keyOrder: [UInt16] = []
@@ -17,8 +52,9 @@ struct MacRemoteInputEncoder {
 
     /// Supply the negotiated capability corresponding to the desktop's
     /// isTargetVersionGreaterThan6213 branch; this encoder does not infer it.
-    init(supportsBinaryKeyboard: Bool) {
+    init(supportsBinaryKeyboard: Bool, mode: KeyboardInputMode = .keycode) {
         self.supportsBinaryKeyboard = supportsBinaryKeyboard
+        self.mode = mode
     }
 
     mutating func encode(_ input: RemoteInput) -> [Data] {
@@ -78,7 +114,7 @@ struct MacRemoteInputEncoder {
                 reconcileModifier(group, avoiding: pressed ? nil : code, into: &output)
             } else if pressed {
                 pressKey(code, mapping: mapping,
-                    character: Self.character(for: mapping, characters: characters, modifiers: flags),
+                    character: characterValue(for: mapping, characters: characters, modifiers: flags),
                     synthetic: false, into: &output)
             } else {
                 releaseKey(code, into: &output)
@@ -161,6 +197,32 @@ struct MacRemoteInputEncoder {
         guard let held = keys.removeValue(forKey: code) else { return }
         keyOrder.removeAll { $0 == code }
         output.append(held.message(pressed: false, capsLock: modifiers.contains(.capsLock)).encode())
+    }
+
+    private func characterValue(for key: Key, characters: String?, modifiers: RemoteModifiers) -> UInt16 {
+        switch mode {
+        case .keycode:
+            return Self.character(for: key, characters: characters, modifiers: modifiers)
+        case .vniPassthrough:
+            // Pure physical keys, including for Return/Tab/Delete: any
+            // character hint switches the remote to a text path that a VNI
+            // IME's keyboard hook cannot compose from.
+            return 0
+        case .unicodeText:
+            return Self.unicodeCharacter(for: key, characters: characters, modifiers: modifiers)
+        }
+    }
+
+    private static func unicodeCharacter(for key: Key, characters: String?, modifiers: RemoteModifiers) -> UInt16 {
+        // Shortcut modifiers select the physical VK path, as in `character`.
+        guard modifiers.intersection([.control, .option, .command]).isEmpty else { return 0 }
+        if let control = key.controlCharacter { return control }
+        guard key.text, let characters, characters.utf16.count == 1,
+              let unit = characters.utf16.first else { return 0 }
+        // Printable BMP text only: no C0/C1 controls, no DEL, and none of the
+        // private-use codes AppKit assigns to function/navigation keys.
+        guard unit >= 0x20, unit != 0x7f, !(0xf700...0xf8ff).contains(unit) else { return 0 }
+        return unit
     }
 
     private static func character(for key: Key, characters: String?, modifiers: RemoteModifiers) -> UInt16 {

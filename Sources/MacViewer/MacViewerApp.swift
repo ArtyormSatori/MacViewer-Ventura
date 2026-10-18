@@ -19,6 +19,7 @@ struct MacViewerApp: App {
                     applicationDelegate.model = model
                     applicationDelegate.hosting = hosting
                     updater.startAutomaticChecks()
+                    if MacHostingModel.unattendedAccessEnabled { hosting.start() }
                 }
                 .appLanguage()
         }
@@ -39,7 +40,7 @@ struct MacViewerApp: App {
         }
 
         Settings {
-            MacViewerSettings(model: model, updater: updater).appLanguage()
+            MacViewerSettings(model: model, hosting: hosting, updater: updater).appLanguage()
         }
     }
 }
@@ -47,7 +48,14 @@ struct MacViewerApp: App {
 struct MacViewerSettings: View {
     private static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
     @ObservedObject var model: ConnectionModel
+    @ObservedObject var hosting: MacHostingModel
     @ObservedObject var updater: UpdateChecker
+    @AppStorage(MacHostingModel.unattendedAccessKey) private var unattendedAccess = false
+    @AppStorage(MacHostingModel.unattendedControlKey) private var unattendedControl = true
+    @AppStorage(MacHostingModel.preventSleepKey) private var preventSleep = true
+    @State private var loginItemEnabled = MacLoginItem.isEnabled
+    @AppStorage(KeyboardInputMode.defaultsKey) private var keyboardMode = KeyboardInputMode.keycode.rawValue
+    @State private var loginItemError: String?
     @AppStorage(ConnectionModel.rememberPartnersKey) private var rememberPartners = true
     @AppStorage("MacViewer.smoothScreen") private var smoothScreen = true
     @AppStorage("MacViewer.scrollSensitivity") private var scrollSensitivity = 1.0
@@ -77,6 +85,42 @@ struct MacViewerSettings: View {
                     .disabled(model.recentPartners.isEmpty)
                 Button("Forget saved passwords", action: model.forgetSavedPasswords)
             }
+            Section("Unattended access") {
+                Toggle("Allow unattended access to this Mac", isOn: $unattendedAccess)
+                    .onChange(of: unattendedAccess) { enabled in
+                        if enabled, !hosting.isRunning { hosting.start() }
+                    }
+                Toggle("Allow control without approval", isOn: $unattendedControl)
+                    .disabled(!unattendedAccess)
+                Toggle("Open MacViewer at login", isOn: $loginItemEnabled)
+                    .onChange(of: loginItemEnabled) { enabled in
+                        Task {
+                            do {
+                                try await MacLoginItem.setEnabled(enabled)
+                                loginItemError = nil
+                            } catch {
+                                loginItemError = error.localizedDescription
+                            }
+                            loginItemEnabled = MacLoginItem.isEnabled
+                        }
+                    }
+                Toggle("Keep this Mac awake while sharing", isOn: $preventSleep)
+                Text("Anyone who knows this Mac's ID and password can connect without a person approving here. This Mac still verifies the password itself before approving. Grant Screen Recording and Accessibility once so control works unattended.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let loginItemError {
+                    Text("Start at login could not be changed: \(loginItemError)")
+                        .font(.caption).foregroundStyle(.red)
+                }
+            }
+            Section("Keyboard") {
+                Picker("Keyboard input mode", selection: $keyboardMode) {
+                    ForEach(KeyboardInputMode.allCases, id: \.rawValue) { mode in
+                        Text(mode.title).tag(mode.rawValue)
+                    }
+                }
+                Text("Applies to new sessions. US keycode matches the remote layout directly. VNI passthrough sends raw keys so a VNI input method on the remote computer composes the tones — keep this Mac's input source on ABC/US while using it. Unicode text sends characters already composed on this Mac, for remotes without a Vietnamese IME.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Clipboard") {
                 Toggle("Share clipboard with the other computer", isOn: $shareClipboard)
                 Text("Text copied on either computer can be pasted on the other. Applies to new sessions.")
@@ -100,7 +144,7 @@ struct MacViewerSettings: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 490, height: 540)
+        .frame(width: 490, height: 660)
     }
 }
 

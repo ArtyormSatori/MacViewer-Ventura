@@ -85,6 +85,10 @@ public actor FramedTCPTransport {
                         complete(false)
                         return
                     }
+                    // macOS 13's trust store predates the relay's Sectigo R46
+                    // root (added by Apple in 14.4); add it as an extra anchor
+                    // so Ventura can build the chain. No-op elsewhere.
+                    RelayTrustAnchors.apply(to: trust)
                     complete(SecTrustEvaluateWithError(trust, nil))
                 }, queue)
             }

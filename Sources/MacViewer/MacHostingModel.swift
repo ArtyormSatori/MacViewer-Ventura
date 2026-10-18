@@ -37,6 +37,63 @@ final class MacHostingModel: ObservableObject {
     private var sideSwitchGeneration = UUID()
     private let capture = MacScreenCapture()
     private let input = MacHostInputController()
+    private var sleepActivity: NSObjectProtocol?
+
+    // MARK: - Unattended access
+
+    static let unattendedAccessKey = "MacViewer.unattendedAccess"
+    static let unattendedControlKey = "MacViewer.unattendedControl"
+    static let preventSleepKey = "MacViewer.preventSleepWhileHosting"
+
+    /// A request reaches this model only after the host session verified the
+    /// viewer's proof of this Mac's password (see `UltraViewerHostSession`),
+    /// so unattended approval never weakens authentication — it replaces
+    /// only the extra manual click.
+    nonisolated static var unattendedAccessEnabled: Bool {
+        UserDefaults.standard.bool(forKey: unattendedAccessKey)
+    }
+
+    nonisolated static var unattendedControlEnabled: Bool {
+        UserDefaults.standard.object(forKey: unattendedControlKey) as? Bool ?? true
+    }
+
+    nonisolated static var preventSleepEnabled: Bool {
+        UserDefaults.standard.object(forKey: preventSleepKey) as? Bool ?? true
+    }
+
+    /// Decides an unattended approval: the control flag to approve with, or
+    /// nil to leave the request for manual approval (for example when
+    /// Screen Recording has not been granted yet).
+    nonisolated static func unattendedApproval(canView: Bool, canControl: Bool,
+                                               controlPreference: Bool) -> Bool? {
+        guard canView else { return nil }
+        return controlPreference && canControl
+    }
+
+    /// Approves a password-verified request without a click when unattended
+    /// access is on. Missing permissions leave the request pending, exactly
+    /// as a manual approval would.
+    private func approveUnattendedlyIfEnabled() {
+        guard Self.unattendedAccessEnabled else { return }
+        refreshPermissions()
+        guard let control = Self.unattendedApproval(canView: canView, canControl: canControl,
+                                                    controlPreference: Self.unattendedControlEnabled)
+        else { return }
+        status = "Approving automatically (unattended access is on)."
+        approve(control: control)
+    }
+
+    private func beginSleepPrevention() {
+        guard Self.preventSleepEnabled, sleepActivity == nil else { return }
+        sleepActivity = ProcessInfo.processInfo.beginActivity(
+            options: [.idleSystemSleepDisabled, .idleDisplaySleepDisabled],
+            reason: "MacViewer is sharing this Mac")
+    }
+
+    private func endSleepPrevention() {
+        if let sleepActivity { ProcessInfo.processInfo.endActivity(sleepActivity) }
+        sleepActivity = nil
+    }
 
     var isRunning: Bool { phase != .off && phase != .failed }
     var canView: Bool { permissions.screenRecording }
@@ -63,6 +120,7 @@ final class MacHostingModel: ObservableObject {
         let token = UUID(); generation = token
         phase = .registering; errorMessage = nil
         status = "Getting this Mac’s ID…"
+        beginSleepPrevention()
         refreshPermissions()
         reader = Task { [weak self] in
             guard let self else { return }
@@ -84,6 +142,7 @@ final class MacHostingModel: ObservableObject {
                         cancelSideSwitch()
                         pendingRequest = request; phase = .awaitingApproval
                         status = "An incoming connection needs your approval."
+                        approveUnattendedlyIfEnabled()
                     case let .connected(request):
                         cancelSideSwitch()
                         viewer = request; pendingRequest = nil; isApproving = false; isEndingViewer = false; phase = .sharing
@@ -132,6 +191,7 @@ final class MacHostingModel: ObservableObject {
                 stop()
             } catch {
                 guard generation == token else { return }
+                endSleepPrevention()
                 tools.deactivate()
                 cancelSideSwitch()
                 cancelControlUpdate(); isEndingViewer = false
@@ -293,6 +353,7 @@ final class MacHostingModel: ObservableObject {
     }
 
     func stop() {
+        endSleepPrevention()
         tools.deactivate()
         cancelSideSwitch()
         cancelControlUpdate(); isEndingViewer = false
