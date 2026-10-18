@@ -14,7 +14,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 60
     env:
-      TAG: v4.0.2
+      TAG: v4.0.3
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -37,8 +37,8 @@ jobs:
         env:
           MACVIEWER_SIGNING_IDENTITY: "-"
           MACVIEWER_UNIVERSAL: "1"
-          MACVIEWER_VERSION: "4.0.2"
-          MACVIEWER_BUILD_NUMBER: "13"
+          MACVIEWER_VERSION: "4.0.3"
+          MACVIEWER_BUILD_NUMBER: "14"
           MACVIEWER_VENTURA_RELEASE: "4"
         run: |
           set -o pipefail
@@ -52,14 +52,14 @@ jobs:
       - name: Build ZIP
         run: |
           mkdir -p release
-          ditto -c -k --sequesterRsrc --keepParent dist/MacViewer.app "release/MacViewer-Ventura-4.0.2-macOS.zip"
+          ditto -c -k --sequesterRsrc --keepParent dist/MacViewer.app "release/MacViewer-Ventura-4.0.3-macOS.zip"
 
       - name: Build DMG (optional)
         continue-on-error: true
         run: |
           python3 -m venv "$RUNNER_TEMP/dmgbuild"
           "$RUNNER_TEMP/dmgbuild/bin/pip" install --quiet dmgbuild==1.6.5
-          PATH="$RUNNER_TEMP/dmgbuild/bin:$PATH" scripts/make_dmg.sh dist/MacViewer.app "4.0.2" "release/MacViewer-Ventura-4.0.2-macOS.dmg"
+          PATH="$RUNNER_TEMP/dmgbuild/bin:$PATH" scripts/make_dmg.sh dist/MacViewer.app "4.0.3" "release/MacViewer-Ventura-4.0.3-macOS.dmg"
 
       - name: Checksums
         run: |
@@ -74,7 +74,7 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" release/* --clobber
           else
-            gh release create "$TAG" release/* --title "MacViewer Ventura 4.0.2" --notes-file .github/ventura-release-notes.md
+            gh release create "$TAG" release/* --title "MacViewer Ventura 4.0.3" --notes-file .github/ventura-release-notes.md
           fi
 
       - name: Upload build log (always)
