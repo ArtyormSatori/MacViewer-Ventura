@@ -45,10 +45,14 @@ struct KeyboardInputModeTests {
         #expect(encoder.encode(.key(keyCode: 0x0e, characters: "😀", pressed: true, modifiers: [])) == [
             Data([30, 124, 124, 124, 1, 0x45, 0x12, 0, 0, 0, 0])
         ])
-        // With Control held, á must go down the physical shortcut path.
-        #expect(encoder.encode(.key(keyCode: 0x00, characters: "á", pressed: true, modifiers: [.control])) == [
-            Data([30, 124, 124, 124, 1, 0x41, 0x1e, 0, 0, 0, 0])
-        ])
+        // With Control held, á must go down the physical shortcut path: the
+        // encoder first synthesizes the Control key itself (its standard
+        // modifier reconciliation, in every mode), then the A key with NO
+        // composed character attached.
+        let shortcut = encoder.encode(.key(keyCode: 0x00, characters: "á", pressed: true, modifiers: [.control]))
+        #expect(shortcut.count == 2)
+        #expect(shortcut.last == Data([30, 124, 124, 124, 1, 0x41, 0x1e, 0, 0, 0, 0]))
+        #expect(shortcut.allSatisfy { $0[8] == 0 && $0[9] == 0 })
     }
 
     @Test("Keyboard mode default and stored key stay stable")

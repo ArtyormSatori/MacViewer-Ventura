@@ -202,6 +202,7 @@ final class ConnectionModel: ObservableObject {
         connectionTask = nil
         pendingCredential = nil
         stopInput()
+        resetControlPosture()
         stopAudio()
         cursorPresenter.reset()
         remoteCursor = nil
@@ -436,7 +437,6 @@ final class ConnectionModel: ObservableObject {
         case let .connected(info):
             guard phase == .connecting else { return }
             remoteInfo = info
-            controlEnabled = info.allowsRemoteInput && !controlSuppressedByUser
             phase = .connected
             status = "Connected to \(info.displayName ?? info.partnerID)."
             rememberPartner(info.partnerID)
@@ -448,6 +448,7 @@ final class ConnectionModel: ObservableObject {
                 }
             }
             startInput()
+            controlEnabled = info.allowsRemoteInput && !controlSuppressedByUser
             sendCommands([RemoteControlCommands.cursorPositions(enabled: showRemoteCursor)], requiresControl: false)
             applyImageQualityPreference()
             let token = generation
@@ -525,6 +526,7 @@ final class ConnectionModel: ObservableObject {
         connectionTask?.cancel(); connectionTask = nil
         pendingCredential = nil
         stopInput()
+        resetControlPosture()
         stopAudio()
         cursorPresenter.reset(); remoteCursor = nil
         tools.deactivate()
@@ -542,6 +544,7 @@ final class ConnectionModel: ObservableObject {
         connectionTask?.cancel(); connectionTask = nil
         pendingCredential = nil
         stopInput()
+        resetControlPosture()
         stopAudio()
         cursorPresenter.reset(); remoteCursor = nil
         tools.deactivate()
@@ -611,12 +614,19 @@ final class ConnectionModel: ObservableObject {
         inputOverflow = nil
     }
 
-    private func stopInput() {
-        // Adapters must release remote held input as part of disconnect as well.
-        // The next session starts from the default again: control on, and any
-        // user suppression from the previous session forgotten.
+    /// A finished session hands the next one the default posture: control
+    /// on (subject to the peer's permission) and no leftover user-off.
+    private func resetControlPosture() {
         controlEnabled = true
         controlSuppressedByUser = false
+    }
+
+    private func stopInput() {
+        // Adapters must release remote held input as part of disconnect as
+        // well. This is only a sender teardown: startInput() calls it before
+        // (re)creating the queue, so it must not decide the session's control
+        // posture — that belongs to the connect and end-of-session paths.
+        controlEnabled = false
         inputGeneration = UUID()
         inputBuffer?.finish()
         inputBuffer = nil
