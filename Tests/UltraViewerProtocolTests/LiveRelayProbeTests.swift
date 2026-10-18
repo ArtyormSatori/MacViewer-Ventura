@@ -21,7 +21,7 @@ struct LiveRelayProbeTests {
             localAddress: try RelayIPv4Address("192.168.1.10"),
             computerNameUTF8Base64: Data("MacViewer-CI-Probe".utf8).base64EncodedString(),
             clientVersion: "6.6.133",
-            macAddress: "02:00:4C:4F:4F:50",
+            macAddress: "02-00-4C-4F-4F-50",
             diskIdentity: "",
             operatingSystem: "0|15|0|0|0|0",
             installerReferral: 0, customPassword: "", usesProxy: false, quickSupportMetadata: "",
