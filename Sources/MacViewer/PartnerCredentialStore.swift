@@ -92,13 +92,20 @@ final class KeychainPartnerCredentialStore: PartnerCredentialStore {
         let data = Data(password.utf8)
         guard !data.isEmpty else { throw Error.emptyPassword }
         guard data.count <= Self.maximumPasswordBytes else { throw Error.passwordTooLong }
-        let changes: Operations.Query = [kSecValueData as String: data]
+        // Keep partner passwords usable only while this Mac is unlocked and
+        // never migratable to another device (also not synchronizable, see
+        // baseQuery). Set on both add and update so older items migrate.
+        let changes: Operations.Query = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+        ]
         let status = operations.update(query, changes)
         if status == errSecSuccess { return }
         guard status == errSecItemNotFound else { throw Error.keychain(status) }
         var item = query
         item[kSecValueData as String] = data
         item[kSecAttrLabel as String] = "MacViewer partner password"
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         let added = operations.add(item)
         if added == errSecDuplicateItem {
             // Another writer can create the same item after our update query.

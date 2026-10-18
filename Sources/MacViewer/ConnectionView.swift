@@ -137,7 +137,7 @@ struct ConnectionView: View {
                     .font(.callout).foregroundStyle(.secondary)
             }
             if let release = updater.availableRelease { updateButton(release) }
-            SettingsLink { Image(systemName: "gearshape").font(.title3) }
+            settingsButton
                 .buttonStyle(.plain).help("Settings")
                 .padding(.leading, 12)
         }
@@ -165,8 +165,7 @@ struct ConnectionView: View {
             .padding(.horizontal, 24).padding(.vertical, 20)
             .frame(maxWidth: .infinity, alignment: .top)
         }
-        .scrollBounceBehavior(.basedOnSize)
-        .scrollClipDisabled(false)
+        .venturaScrollFixes()
         .clipped()
     }
 
@@ -612,5 +611,38 @@ private struct IncomingMacConnectionView: View {
             }
         }.padding(30).frame(width: 510)
         .interactiveDismissDisabled(hosting.isApproving)
+    }
+}
+
+
+// Ventura compatibility for controls introduced after macOS 13.0.
+// On macOS 14+ the original SwiftUI controls are used unchanged.
+private extension ConnectionView {
+    @ViewBuilder
+    var settingsButton: some View {
+        if #available(macOS 14.0, *) {
+            SettingsLink { Image(systemName: "gearshape").font(.title3) }
+        } else {
+            // macOS 13 opens the Settings scene through the classic
+            // application action; SettingsLink itself requires macOS 14.
+            Button {
+                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            } label: {
+                Image(systemName: "gearshape").font(.title3)
+            }
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func venturaScrollFixes() -> some View {
+        if #available(macOS 14.0, *) {
+            self.scrollBounceBehavior(.basedOnSize).scrollClipDisabled(false)
+        } else if #available(macOS 13.3, *) {
+            self.scrollBounceBehavior(.basedOnSize)
+        } else {
+            self
+        }
     }
 }
