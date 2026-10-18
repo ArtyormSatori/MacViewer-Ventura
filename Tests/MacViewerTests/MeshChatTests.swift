@@ -235,6 +235,13 @@ struct MeshChatTests {
         #expect(bobModel?.messages.first?.senderName == "Alice Mac")
         #expect(bobModel?.messages.first?.delivery == .received)
         #expect(bobModel?.messages.first?.isOutgoing == false)
+        // Model and center aggregate must agree in the same
+        // synchronous turn as the delivery — no settle, no await:
+        // the inbound path is synchronous, so both counters are
+        // final the moment `handle` returns. (Regression pin for
+        // the CI run 5 failure, where the center's task-maintained
+        // cache still read 0 here.)
+        #expect(bobModel?.unreadCount == 1)
         #expect(bobCenter.totalUnread == 1)
     }
 
@@ -262,7 +269,12 @@ struct MeshChatTests {
         let wire3 = MeshChatMessage(id: UUID(), fromName: "Bob's Mac", text: "again",
                                     timestamp: Date(timeIntervalSince1970: 102))
         center.handle(chatEnvelope(wire3, from: bob))
+        // After the full open → close → re-arm cycle the center
+        // aggregate must still agree with the model in the same
+        // synchronous turn (see the regression note in
+        // twoModelRoundTrip).
         #expect(model?.unreadCount == 1)
+        #expect(center.totalUnread == 1)
     }
 
     @Test("A chat message from an unpaired peer is ignored entirely")

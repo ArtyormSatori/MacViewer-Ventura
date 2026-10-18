@@ -215,7 +215,20 @@ final class MeshChatModel: ChatTransport {
 /// would echo the refused envelope's marker in the error frame.
 @MainActor
 final class MeshChatCenter: ObservableObject {
-    @Published private(set) var totalUnread = 0
+    /// Total unread across all conversations, computed live from
+    /// the per-conversation models. The inbound path is fully
+    /// synchronous (handle → receive → increment), so this total
+    /// must be too: a stored cache refreshed from the models'
+    /// `objectWillChange` cannot be — that publisher fires
+    /// *before* the mutation, so a cache can only be refreshed
+    /// from a deferred task, and every reader in the same turn
+    /// (a view, a test, any synchronous consumer) sees a stale
+    /// zero. A computed total has no maintenance path and cannot
+    /// lag. (CI run 5 caught exactly that staleness: the model
+    /// counted 1 while this total still read 0.)
+    var totalUnread: Int {
+        models.values.reduce(0) { $0 + $1.unreadCount }
+    }
 
     private var models: [MeshID: MeshChatModel] = [:]
     private var modelSinks: [MeshID: AnyCancellable] = [:]
@@ -254,13 +267,14 @@ final class MeshChatCenter: ObservableObject {
             history: MeshChatHistoryStore(directory: historyDirectory),
             deliveryWindow: deliveryWindow)
         models[peer] = model
-        // Published sends before mutation; refresh derived state
-        // (unread totals, republish) after the model has changed.
+        // The model's `objectWillChange` fires before its
+        // mutation; forward this center's own change notification
+        // after the model has changed, so observers re-read
+        // derived state (`totalUnread` is computed live and needs
+        // no refresh — this hop exists only for view updates).
         modelSinks[peer] = model.objectWillChange.sink { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self else { return }
-                recomputeUnread()
-                objectWillChange.send()
+                self?.objectWillChange.send()
             }
         }
         return model
@@ -318,11 +332,5 @@ final class MeshChatCenter: ObservableObject {
     /// settles as failed.
     func disconnect() {
         for model in models.values { model.disconnect() }
-    }
-
-    // MARK: Internals
-
-    private func recomputeUnread() {
-        totalUnread = models.values.reduce(0) { $0 + $1.unreadCount }
     }
 }
