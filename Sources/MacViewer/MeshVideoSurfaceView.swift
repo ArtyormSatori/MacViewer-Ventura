@@ -148,30 +148,30 @@ final class MeshRemoteVideoNSView: NSView {
         }
     }
 
-    override func mouseMoved(_ event: NSEvent) { emitMove(event) }
-    override func mouseDragged(_ event: NSEvent) { emitMove(event) }
-    override func rightMouseDragged(_ event: NSEvent) { emitMove(event) }
-    override func otherMouseDragged(_ event: NSEvent) { emitMove(event) }
+    override func mouseMoved(with event: NSEvent) { emitMove(event) }
+    override func mouseDragged(with event: NSEvent) { emitMove(event) }
+    override func rightMouseDragged(with event: NSEvent) { emitMove(event) }
+    override func otherMouseDragged(with event: NSEvent) { emitMove(event) }
 
-    override func mouseDown(_ event: NSEvent) {
+    override func mouseDown(with event: NSEvent) {
         if inputEnabled { window?.makeFirstResponder(self) }
         emitButton(.left, down: true, event)
     }
-    override func mouseUp(_ event: NSEvent) { emitButton(.left, down: false, event) }
-    override func rightMouseDown(_ event: NSEvent) { emitButton(.right, down: true, event) }
-    override func rightMouseUp(_ event: NSEvent) { emitButton(.right, down: false, event) }
-    override func otherMouseDown(_ event: NSEvent) {
+    override func mouseUp(with event: NSEvent) { emitButton(.left, down: false, event) }
+    override func rightMouseDown(with event: NSEvent) { emitButton(.right, down: true, event) }
+    override func rightMouseUp(with event: NSEvent) { emitButton(.right, down: false, event) }
+    override func otherMouseDown(with event: NSEvent) {
         if event.buttonNumber == 2 { emitButton(.middle, down: true, event) }
     }
-    override func otherMouseUp(_ event: NSEvent) {
+    override func otherMouseUp(with event: NSEvent) {
         if event.buttonNumber == 2 { emitButton(.middle, down: false, event) }
     }
 
-    override func mouseExited(_ event: NSEvent) {
+    override func mouseExited(with event: NSEvent) {
         MainActor.assumeIsolated { inputSender?.pointerLeft() }
     }
 
-    override func scrollWheel(_ event: NSEvent) {
+    override func scrollWheel(with event: NSEvent) {
         guard inputEnabled else { return }
         // The wire unit is scroll LINES (part 3a): wheel
         // notches already arrive as lines; precise (trackpad)
@@ -193,7 +193,7 @@ final class MeshRemoteVideoNSView: NSView {
 
     // MARK: Keyboard
 
-    override func keyDown(_ event: NSEvent) {
+    override func keyDown(with event: NSEvent) {
         guard inputEnabled else { super.keyDown(event); return }
         let flags = meshInputModifiers(from: event.modifierFlags)
         MainActor.assumeIsolated {
@@ -201,7 +201,7 @@ final class MeshRemoteVideoNSView: NSView {
         }
     }
 
-    override func keyUp(_ event: NSEvent) {
+    override func keyUp(with event: NSEvent) {
         guard inputEnabled else { super.keyUp(event); return }
         let flags = meshInputModifiers(from: event.modifierFlags)
         MainActor.assumeIsolated {
@@ -209,7 +209,7 @@ final class MeshRemoteVideoNSView: NSView {
         }
     }
 
-    override func flagsChanged(_ event: NSEvent) {
+    override func flagsChanged(with event: NSEvent) {
         guard inputEnabled else { super.flagsChanged(event); return }
         let flags = meshInputModifiers(from: event.modifierFlags)
         MainActor.assumeIsolated {

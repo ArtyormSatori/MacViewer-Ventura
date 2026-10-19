@@ -169,7 +169,7 @@ final class MeshMediaCoordinator: ObservableObject {
 
     /// The real applier factory: the CGEvent executor from the
     /// MeshWebRTC target.
-    static var realApplierFactory: (Bool, @escaping () -> MeshDisplaySize?) -> MeshInputApplying {
+    static var realApplierFactory: (Bool, @escaping @Sendable () -> MeshDisplaySize?) -> MeshInputApplying {
         { controlAllowed, sizeProvider in
             MeshInputApplier(controlAllowed: controlAllowed,
                              displaySizeProvider: sizeProvider)
