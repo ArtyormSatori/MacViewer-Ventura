@@ -43,6 +43,16 @@ final class WebRTCSpikeTests: XCTestCase {
         private let lock = NSLock()
         private var remoteDescriptionSet = false
         private var pendingRemoteCandidates: [RTCIceCandidate] = []
+        private var openedChannelCount = 0
+
+        /// How many remotely created channels the framework has
+        /// delivered to this peer so far (run-15 probe: distinguishes
+        /// "framework never called didOpen" from "harness lost it").
+        var channelsOpened: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return openedChannelCount
+        }
 
         init(factory: RTCPeerConnectionFactory) {
             let config = RTCConfiguration()
@@ -96,15 +106,94 @@ final class WebRTCSpikeTests: XCTestCase {
         }
         func peerConnection(_ peerConnection: RTCPeerConnection, didRemove candidates: [RTCIceCandidate]) {}
         func peerConnection(_ peerConnection: RTCPeerConnection, didOpen dataChannel: RTCDataChannel) {
+            lock.lock()
+            openedChannelCount += 1
+            lock.unlock()
             onDataChannel?(dataChannel)
         }
     }
 
     /// B side: echoes every received buffer back on the same channel.
+    ///
+    /// Instrumented after the run-15 failure (negotiation and A's
+    /// channel-open all succeeded, the echo never came back, and the
+    /// old code discarded the one signal that could say why — the
+    /// `sendData:` result). The counters below localize a break in
+    /// the chain didOpen → B receive → B sendData → A receive on a
+    /// single CI run: every hop leaves a number behind.
     private final class EchoServer: NSObject, RTCDataChannelDelegate {
-        func dataChannelDidChangeState(_ dataChannel: RTCDataChannel) {}
+        private let lock = NSLock()
+        /// B's end of the channel, retained on purpose.
+        /// `RTCDataChannel.delegate` is weak (RTCDataChannel.h in the
+        /// M155 framework), and nothing else in this harness holds
+        /// B's wrapper: the binary carries no ObjC channel-collection
+        /// property on RTCPeerConnection, so an unretained wrapper is
+        /// free to die with the didOpen stack frame — taking every
+        /// later delegate callback with it.
+        private var channel: RTCDataChannel?
+        private var pendingEchoes: [RTCDataBuffer] = []
+        private var attachCount = 0
+        private var stateAtAttach: RTCDataChannelState?
+        private var receivedCount = 0
+        private var statesAtReceive: [RTCDataChannelState] = []
+        private var sendResults: [Bool] = []
+        private var flushedOnOpen = 0
+
+        /// Wiring entry point, called from SpikePeer's didOpen
+        /// forwarding: records that the channel reached the harness
+        /// and the state it was in at that moment, retains it, then
+        /// takes over as the channel's (weakly held) delegate.
+        func attach(_ dataChannel: RTCDataChannel) {
+            lock.lock()
+            attachCount += 1
+            stateAtAttach = dataChannel.readyState
+            channel = dataChannel
+            lock.unlock()
+            dataChannel.delegate = self
+        }
+
+        func stats() -> (attachCount: Int, stateAtAttach: RTCDataChannelState?,
+                         receivedCount: Int, statesAtReceive: [RTCDataChannelState],
+                         sendResults: [Bool], flushedOnOpen: Int) {
+            lock.lock()
+            defer { lock.unlock() }
+            return (attachCount, stateAtAttach, receivedCount,
+                    statesAtReceive, sendResults, flushedOnOpen)
+        }
+
+        func dataChannelDidChangeState(_ dataChannel: RTCDataChannel) {
+            // B must not assume its own end is ready just because
+            // a buffer arrived: echoes queued while this end was
+            // still connecting go out when it reports .open.
+            if dataChannel.readyState == .open { flushPendingEchoes() }
+        }
+
         func dataChannel(_ dataChannel: RTCDataChannel, didReceiveMessageWith buffer: RTCDataBuffer) {
-            _ = dataChannel.sendData(RTCDataBuffer(data: buffer.data, isBinary: buffer.isBinary))
+            let echo = RTCDataBuffer(data: buffer.data, isBinary: buffer.isBinary)
+            lock.lock()
+            receivedCount += 1
+            statesAtReceive.append(dataChannel.readyState)
+            let isOpen = dataChannel.readyState == .open
+            if !isOpen { pendingEchoes.append(echo) }
+            lock.unlock()
+            if isOpen { recordSend(dataChannel.sendData(echo)) }
+        }
+
+        private func flushPendingEchoes() {
+            lock.lock()
+            let queued = pendingEchoes
+            pendingEchoes = []
+            let target = channel
+            flushedOnOpen += queued.count
+            lock.unlock()
+            guard let target else { return }
+            for echo in queued { recordSend(target.sendData(echo)) }
+        }
+
+        private func recordSend(_ ok: Bool) {
+            lock.lock()
+            sendResults.append(ok)
+            lock.unlock()
         }
     }
 
@@ -112,10 +201,14 @@ final class WebRTCSpikeTests: XCTestCase {
     private final class EchoClient: NSObject, RTCDataChannelDelegate {
         var onOpen: (() -> Void)?
         var onMessage: ((Data) -> Void)?
+        /// Run-15 probe: how many buffers A's delegate was handed,
+        /// independent of the expectation (break-d localizer).
+        let receivedMessages = Counter()
         func dataChannelDidChangeState(_ dataChannel: RTCDataChannel) {
             if dataChannel.readyState == .open { onOpen?() }
         }
         func dataChannel(_ dataChannel: RTCDataChannel, didReceiveMessageWith buffer: RTCDataBuffer) {
+            receivedMessages.increment()
             onMessage?(buffer.data)
         }
     }
@@ -224,7 +317,7 @@ final class WebRTCSpikeTests: XCTestCase {
 
         // B: echo whatever arrives on the channel A creates.
         let echoServer = EchoServer()
-        peerB.onDataChannel = { channel in channel.delegate = echoServer }
+        peerB.onDataChannel = { channel in echoServer.attach(channel) }
 
         // A: create the channel BEFORE offering, send on open.
         let payload: Data = {
@@ -264,6 +357,39 @@ final class WebRTCSpikeTests: XCTestCase {
         }
 
         waitForExpectations(timeout: 30)
+
+        // Run-15 probe: walk the echo chain hop by hop so a single
+        // CI log names the broken link instead of just "no echo".
+        // (a) framework → harness: did B's peer connection deliver
+        // the channel at all, and did the echo server attach to it?
+        // (b) delivery: did a message reach B's delegate?
+        // (c) B's echo: was sendData attempted, and did it accept?
+        // (d) return trip: did A's delegate receive anything?
+        let bStats = echoServer.stats()
+        print("SPIKE PROBE: pcDidOpen B=\(peerB.channelsOpened) "
+            + "attach=\(bStats.attachCount) "
+            + "stateAtAttach=\(String(describing: bStats.stateAtAttach)) "
+            + "B received=\(bStats.receivedCount) "
+            + "statesAtReceive=\(bStats.statesAtReceive) "
+            + "B echo sendData results=\(bStats.sendResults) "
+            + "B flushedOnOpen=\(bStats.flushedOnOpen) "
+            + "A received=\(echoClient.receivedMessages.get())")
+        XCTAssertEqual(peerB.channelsOpened, 1,
+                       "B: peerConnection(_:didOpen:) never fired — the framework "
+                       + "never delivered A's channel to B (break a)")
+        XCTAssertEqual(bStats.attachCount, 1,
+                       "B: channel delivered but the echo server never attached (break a)")
+        XCTAssertGreaterThanOrEqual(bStats.receivedCount, 1,
+                                    "B: attached in state \(String(describing: bStats.stateAtAttach)) "
+                                    + "but no message ever reached B's delegate — the channel "
+                                    + "wrapper or its delegate did not survive (break b)")
+        XCTAssertFalse(bStats.sendResults.isEmpty,
+                       "B: message received but the echo sendData was never attempted (break c)")
+        XCTAssertTrue(bStats.sendResults.allSatisfy { $0 },
+                      "B: echo sendData returned \(bStats.sendResults) — false means the send "
+                      + "was rejected (states at receive: \(bStats.statesAtReceive)) (break c)")
+        XCTAssertEqual(echoClient.receivedMessages.get(), 1,
+                       "A: B's echo sendData accepted but A's delegate received nothing (break d)")
 
         XCTAssertEqual(received, payload, "echo must be byte-exact")
         XCTAssertGreaterThanOrEqual(iceAtoB.get(), 1, "no ICE candidate crossed A→B through the codec")
