@@ -14,7 +14,7 @@ import WebRTC
 /// the signaling client, and the chat transport. The real
 /// `MeshPeerSession` conforms with no adapter code: its public
 /// API already matches member for member.
-protocol MeshPeerSessioning: AnyObject {
+protocol MeshPeerSessioning: AnyObject, Sendable {
     var role: MeshPeerRole { get }
     var state: MeshPeerConnectionState { get }
     var states: AsyncStream<MeshPeerConnectionState> { get }
@@ -57,7 +57,7 @@ extension MeshPeerSession: MeshPeerSessioning {
 /// so coordinator tests can fake it (the real one drives
 /// ScreenCaptureKit, which needs a live display and the Screen
 /// Recording permission).
-protocol MeshScreenCapturing: AnyObject {
+protocol MeshScreenCapturing: AnyObject, Sendable {
     /// The pixel size actually being streamed, once started —
     /// the input applier maps normalized input against this.
     var streamedSize: MeshDisplaySize? { get }
@@ -133,7 +133,7 @@ final class RealScreenCapture: MeshScreenCapturing, @unchecked Sendable {
 /// The seam over the host-side input executor, so coordinator
 /// tests can observe gating without posting real CGEvents.
 /// `MeshInputApplier` (MeshWebRTC) already matches.
-protocol MeshInputApplying: AnyObject {
+protocol MeshInputApplying: AnyObject, Sendable {
     /// The negotiated gate: while false, planned input is
     /// dropped (and counted) inside the applier.
     var controlAllowed: Bool { get set }

@@ -433,7 +433,7 @@ private final class FakeApplierBox: @unchecked Sendable {
     var providers: [() -> MeshDisplaySize?] = []
 }
 
-private final class FakePeerSession: MeshPeerSessioning {
+private final class FakePeerSession: MeshPeerSessioning, @unchecked Sendable {
     let role: MeshPeerRole
     let peer: MeshID
     private(set) var startCalls = 0
@@ -485,7 +485,7 @@ private final class FakePeerSession: MeshPeerSessioning {
     func emitControl(_ data: Data) { controlContinuation.yield(data) }
 }
 
-private final class FakeScreenCapture: MeshScreenCapturing {
+private final class FakeScreenCapture: MeshScreenCapturing, @unchecked Sendable {
     var streamedSize: MeshDisplaySize?
     var onFailure: ((String) -> Void)?
     var startError: Error?
@@ -501,7 +501,7 @@ private final class FakeScreenCapture: MeshScreenCapturing {
     func stop() async { stopCalls += 1 }
 }
 
-private final class FakeApplier: MeshInputApplying {
+private final class FakeApplier: MeshInputApplying, @unchecked Sendable {
     var controlAllowed: Bool
     private(set) var appliedData: [Data] = []
     private(set) var releaseAllCalls = 0

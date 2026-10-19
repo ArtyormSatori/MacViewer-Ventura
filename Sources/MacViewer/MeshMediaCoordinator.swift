@@ -10,6 +10,16 @@ import WebRTC
 /// the applier's `@Sendable` display-size provider (which runs
 /// on WebRTC threads, where the coordinator's main-actor state
 /// is unreachable).
+
+/// Single-value hand-off for a remote video track: RTCVideoTrack
+/// is not Sendable, but the session retains it for its own
+/// lifetime (run-16 law), so carrying the reference across the
+/// main-actor hop in an @unchecked Sendable box is sound.
+private final class RemoteTrackBox: @unchecked Sendable {
+    let track: RTCVideoTrack
+    init(_ track: RTCVideoTrack) { self.track = track }
+}
+
 private final class StreamedSizeBox: @unchecked Sendable {
     private let lock = NSLock()
     private var size: MeshDisplaySize?
@@ -267,9 +277,10 @@ final class MeshMediaCoordinator: ObservableObject {
 
         if role == .viewer {
             session.onRemoteVideoTrack = { [weak self] track in
+                let box = RemoteTrackBox(track)
                 Task { @MainActor [weak self] in
                     guard let self, self.peerSession != nil else { return }
-                    self.remoteVideoTrack = track
+                    self.remoteVideoTrack = box.track
                 }
             }
             inputSender = MeshInputSender { [session] data in
