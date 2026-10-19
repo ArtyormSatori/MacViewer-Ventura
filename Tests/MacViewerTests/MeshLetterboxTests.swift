@@ -95,7 +95,7 @@ struct MeshLetterboxTests {
         #expect(MeshLetterbox.normalizedPoint(CGPoint(x: 10, y: 10),
                                               viewSize: .zero,
                                               contentSize: CGSize(width: 100, height: 100)) == nil)
-        #expect(MeshLetterbox.normalizedPoint(CGPoint(x: .nan, y: 10),
+        #expect(MeshLetterbox.normalizedPoint(CGPoint(x: CGFloat.nan, y: 10),
                                               viewSize: view,
                                               contentSize: CGSize(width: 100, height: 100)) == nil)
     }
