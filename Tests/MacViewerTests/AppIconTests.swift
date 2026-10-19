@@ -100,7 +100,7 @@ struct AppIconTests {
         var offset = 8
         while offset < bytes.count {
             let type = try #require(String(bytes: bytes[offset..<(offset + 4)], encoding: .ascii))
-            let length = bigEndian32(bytes, at: offset)
+            let length = bigEndian32(bytes, at: offset + 4)
             #expect(length >= 8 && offset + length <= bytes.count,
                     "Malformed icns entry \(type) at \(offset)")
             entries.append(IcnsEntry(type: type,
