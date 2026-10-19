@@ -85,8 +85,6 @@ final class MeshRemoteVideoNSView: NSView {
 
     required init?(coder: NSCoder) { super.init(coder: coder) }
 
-    deinit { flushTimer?.invalidate() }
-
     override var acceptsFirstResponder: Bool { inputEnabled }
 
     override func layout() {
@@ -99,6 +97,10 @@ final class MeshRemoteVideoNSView: NSView {
         videoRendererView.frame = rect == .zero ? bounds : rect
     }
 
+    // The flush timer's lifecycle is owned here, not in deinit:
+    // Timer is not Sendable, so Swift 6 forbids touching it from
+    // a nonisolated deinit — and a repeating timer retains the
+    // view anyway, so deinit could never be its cleanup path.
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if window == nil {
