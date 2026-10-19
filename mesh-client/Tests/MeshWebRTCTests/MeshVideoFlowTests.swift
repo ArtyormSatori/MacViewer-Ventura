@@ -157,7 +157,7 @@ final class MeshVideoFlowTests: XCTestCase {
         let probe = RendererProbe()
         let remoteTrackSeen = Locked(false)
         pair.b.onRemoteVideoTrack = { track in
-            track.addRenderer(probe)
+            track.add(probe)
             remoteTrackSeen.with { $0 = true }
         }
 
