@@ -172,7 +172,14 @@ final class SessionToolsModel: ObservableObject {
     private func startChatSendWorkerIfNeeded() {
         guard chatSendWorker == nil else { return }
         chatSendWorker = Task { [weak self] in
-            while let self, !chatSendQueue.isEmpty {
+            // One strong unwrap for the worker's whole life:
+            // per-iteration `while let self` unwrapping left
+            // later statements seeing the optional self again
+            // (Swift 6 rejects the implicit access). deactivate()
+            // settles queued jobs as failed, so a held-alive
+            // worker still drains promptly at session end.
+            guard let self else { return }
+            while !chatSendQueue.isEmpty {
                 let job = chatSendQueue.removeFirst()
                 inFlightChatSend = job
                 guard job.token == generation, isActive, let sendChat else {
