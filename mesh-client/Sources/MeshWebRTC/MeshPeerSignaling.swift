@@ -254,6 +254,28 @@ public enum MeshStatsSelection {
         return MeshCandidateType(parsing: rawType)
     }
 
+    /// The mime type of the codec the outbound video stream is
+    /// actually encoded with (e.g. "video/H264"), resolved by
+    /// following a video outbound-rtp entry's `codecId` to its
+    /// codec entry. Nil until an outbound video stream exists.
+    /// This is the mechanical proof of which encoder the
+    /// negotiation settled on — the video tests assert H.264
+    /// (the VideoToolbox hardware path) through it.
+    public static func outboundVideoCodecMimeType(
+        in stats: [MeshStatsEntry]
+    ) -> String? {
+        for entry in stats where entry.type == "outbound-rtp" {
+            let kind = entry.values["kind"] ?? entry.values["mediaType"]
+            guard case .string("video")? = kind,
+                  case .string(let codecID)? = entry.values["codecId"],
+                  let codec = stats.first(where: { $0.id == codecID && $0.type == "codec" }),
+                  case .string(let mimeType)? = codec.values["mimeType"]
+            else { continue }
+            return mimeType
+        }
+        return nil
+    }
+
     private static func isSucceeded(_ entry: MeshStatsEntry) -> Bool {
         if case .string("succeeded")? = entry.values["state"] { return true }
         return false

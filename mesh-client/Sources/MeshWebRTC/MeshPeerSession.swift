@@ -144,6 +144,11 @@ public final class MeshPeerSession: NSObject, RTCPeerConnectionDelegate, @unchec
     /// initiator before offering.
     public static let controlChannelLabel = "mv-control"
 
+    /// Track / stream ids of the local screen video track
+    /// (`addScreenTrack()`).
+    public static let screenTrackID = "mv-screen"
+    public static let screenStreamID = "mv-stream"
+
     public let signaling: MeshPeerSignaling
     public var localID: MeshID { signaling.localID }
     public var remoteID: MeshID { signaling.remoteID }
@@ -161,10 +166,18 @@ public final class MeshPeerSession: NSObject, RTCPeerConnectionDelegate, @unchec
     /// Payloads received on the control channel, in order.
     public let controlMessages: AsyncStream<Data>
 
+    /// Called (on an arbitrary WebRTC thread) when a remote
+    /// video track arrives — the surface part 3 renders from.
+    /// Set before `start()`; tracks are also retained by the
+    /// session (`remoteVideoTracks`).
+    public var onRemoteVideoTrack: (@Sendable (RTCVideoTrack) -> Void)?
+
     private let sendSignal: @Sendable (SignalingEnvelope) -> Void
     private let factory: RTCPeerConnectionFactory
     private let pc: RTCPeerConnection
     private let control = ControlChannelEnd()
+    private var screenTrackStorage: MeshScreenTrack?
+    private var remoteVideoTrackStorage: [RTCVideoTrack] = []
     private let opQueue = DispatchQueue(label: "mesh.peersession.ops")
     private let lock = NSLock()
     private var currentState: MeshPeerConnectionState = .new
@@ -312,14 +325,96 @@ public final class MeshPeerSession: NSObject, RTCPeerConnectionDelegate, @unchec
         control.send(data)
     }
 
+    // MARK: - Video track
+
+    /// The local screen video track, once `addScreenTrack()`
+    /// has run; nil before that.
+    public var screenTrack: MeshScreenTrack? {
+        lock.withLock { screenTrackStorage }
+    }
+
+    /// Remote video tracks received so far, retained for the
+    /// session's lifetime (run-16 law: never hand out an object
+    /// whose survival depends on the framework's internal
+    /// retention).
+    public var remoteVideoTracks: [RTCVideoTrack] {
+        lock.withLock { remoteVideoTrackStorage }
+    }
+
+    /// Creates the local screen video track — a
+    /// `videoSource(forScreenCast:)` source, a
+    /// `MeshVideoCapturer` feeding it, and the track — and adds
+    /// it to the peer connection. Idempotent: later calls
+    /// return the existing track.
+    ///
+    /// ORDERING: call before negotiation for the track to be
+    /// part of the initial SDP — before `start()` on the
+    /// initiator, before the offer is fed to `handleSignal(_:)`
+    /// on the responder. This layer has no renegotiation yet
+    /// (`peerConnectionShouldNegotiate` stays a no-op), so a
+    /// track added after the answer would exist locally but
+    /// never be negotiated.
+    ///
+    /// Encoding is the framework's default codec factory — for
+    /// the default `RTCPeerConnectionFactory` that is
+    /// `RTCDefaultVideoEncoderFactory`, VideoToolbox-backed
+    /// (hardware H.264). On top of that default this method
+    /// applies an H.264-first codec preference on the video
+    /// transceiver (best effort; see `applyH264Preference`).
+    @discardableResult
+    public func addScreenTrack() -> MeshScreenTrack {
+        if let existing = lock.withLock({ screenTrackStorage }) { return existing }
+        let source = factory.videoSource(forScreenCast: true)
+        let capturer = MeshVideoCapturer(delegate: source)
+        let track = factory.videoTrack(with: source, trackId: Self.screenTrackID)
+        let bundle = MeshScreenTrack(track: track, source: source, capturer: capturer)
+        lock.withLock { screenTrackStorage = bundle }
+        if let sender = pc.addTrack(track, streamIds: [Self.screenStreamID]) {
+            applyH264Preference(to: sender)
+        }
+        return bundle
+    }
+
+    /// H.264-first codec preference for the transceiver owning
+    /// `sender`, reordering (never removing) the sender codec
+    /// capabilities from
+    /// `RTCPeerConnectionFactory.rtpSenderCapabilities(forKind:)`.
+    /// Best effort by design: a failure leaves the framework
+    /// default order in place. The framework surface also
+    /// exposes a factory-wide knob —
+    /// `RTCDefaultVideoEncoderFactory.preferredCodec` — but the
+    /// default factory init this session uses does not hand
+    /// that instance out, so the transceiver's
+    /// `setCodecPreferences(_:)` (RTCRtpTransceiver.h) is the
+    /// reachable expression of the preference.
+    private func applyH264Preference(to sender: RTCRtpSender) {
+        guard let transceiver = pc.transceivers.first(where: { $0.sender === sender })
+        else { return }
+        let capabilities = factory.rtpSenderCapabilities(forKind: kRTCMediaStreamTrackKindVideo)
+        let reordered = capabilities.codecs.sorted { a, b in
+            a.mimeType == "video/H264" && b.mimeType != "video/H264"
+        }
+        try? transceiver.setCodecPreferences(reordered)
+    }
+
+    private func noteRemoteVideoTrack(_ track: RTCVideoTrack) {
+        let isNew: Bool = lock.withLock {
+            guard !remoteVideoTrackStorage.contains(where: { $0.trackId == track.trackId })
+            else { return false }
+            remoteVideoTrackStorage.append(track)
+            return true
+        }
+        if isNew { onRemoteVideoTrack?(track) }
+    }
+
     // MARK: - Stats
 
-    /// The local candidate type of the currently selected pair
-    /// (`host` / `srflx` / `relay` / `prflx`), or nil when no
-    /// pair is carrying traffic yet. This is the distinction
-    /// behind the UI's Direct/Relay badge.
-    public func fetchSelectedCandidatePairType() async -> MeshCandidateType? {
-        let entries: [MeshStatsEntry] = await withCheckedContinuation { continuation in
+    /// All current getStats entries, flattened to
+    /// `MeshStatsEntry` — the raw material for
+    /// `MeshStatsSelection` and for part 3's stats loop (RTT,
+    /// jitter, frames, the Direct/Relay badge).
+    public func fetchStatisticsEntries() async -> [MeshStatsEntry] {
+        await withCheckedContinuation { continuation in
             pc.statistics { report in
                 let entries = report.statistics.values.map { stat in
                     MeshStatsEntry(id: stat.id, type: stat.type,
@@ -328,7 +423,15 @@ public final class MeshPeerSession: NSObject, RTCPeerConnectionDelegate, @unchec
                 continuation.resume(returning: entries)
             }
         }
-        return MeshStatsSelection.selectedLocalCandidateType(in: entries)
+    }
+
+    /// The local candidate type of the currently selected pair
+    /// (`host` / `srflx` / `relay` / `prflx`), or nil when no
+    /// pair is carrying traffic yet. This is the distinction
+    /// behind the UI's Direct/Relay badge.
+    public func fetchSelectedCandidatePairType() async -> MeshCandidateType? {
+        MeshStatsSelection.selectedLocalCandidateType(
+            in: await fetchStatisticsEntries())
     }
 
     /// NSObject → JSONValue for stats values (NSString / NSNumber
@@ -387,7 +490,13 @@ public final class MeshPeerSession: NSObject, RTCPeerConnectionDelegate, @unchec
     public func peerConnection(_ peerConnection: RTCPeerConnection,
                                didChange stateChanged: RTCSignalingState) {}
     public func peerConnection(_ peerConnection: RTCPeerConnection,
-                               didAdd stream: RTCMediaStream) {}
+                               didAdd stream: RTCMediaStream) {
+        // Legacy stream callback (RTCPeerConnection.h): the
+        // same tracks also arrive per-receiver below; the
+        // trackId dedupe in noteRemoteVideoTrack makes the
+        // double delivery harmless.
+        for track in stream.videoTracks { noteRemoteVideoTrack(track) }
+    }
     public func peerConnection(_ peerConnection: RTCPeerConnection,
                                didRemove stream: RTCMediaStream) {}
     public func peerConnectionShouldNegotiate(_ peerConnection: RTCPeerConnection) {}
@@ -413,6 +522,18 @@ public final class MeshPeerSession: NSObject, RTCPeerConnectionDelegate, @unchec
                                didOpen dataChannel: RTCDataChannel) {
         if dataChannel.label == Self.controlChannelLabel {
             control.attach(dataChannel)
+        }
+    }
+
+    /// The unified-plan remote-track surface
+    /// (`RTCPeerConnectionDelegate` in RTCPeerConnection.h):
+    /// a receiver whose track is a video track is a remote
+    /// screen arriving.
+    public func peerConnection(_ peerConnection: RTCPeerConnection,
+                               didAdd rtpReceiver: RTCRtpReceiver,
+                               streams mediaStreams: [RTCMediaStream]) {
+        if let track = rtpReceiver.track as? RTCVideoTrack {
+            noteRemoteVideoTrack(track)
         }
     }
 }

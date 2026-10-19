@@ -48,7 +48,17 @@ let package = Package(
         ),
         .testTarget(
             name: "MeshWebRTCTests",
-            dependencies: ["MeshWebRTC", "MeshClient"]
+            dependencies: [
+                "MeshWebRTC",
+                "MeshClient",
+                // The part-2 tests name framework types
+                // directly (RTCVideoRenderer probe,
+                // RTCVideoCapturerDelegate probe), so the
+                // product is a direct dependency here too —
+                // same macOS condition as the spike target.
+                .product(name: "WebRTC", package: "WebRTC",
+                         condition: .when(platforms: [.macOS])),
+            ]
         ),
     ]
 )
