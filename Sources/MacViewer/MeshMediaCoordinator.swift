@@ -251,7 +251,14 @@ final class MeshMediaCoordinator: ObservableObject {
         switch controller.phase {
         case let .active(sessionID, peer, _, role, capabilities, _):
             guard mediaSessionID != sessionID else { return }
+            // Envelopes that raced ahead of this activation are
+            // buffered for the NEW session, but the teardown of
+            // any previous session clears the buffer — carry the
+            // racing envelopes across the reset. (The replay in
+            // beginMedia still filters them by peer.)
+            let racingEnvelopes = inboundBuffer
             endMedia()
+            inboundBuffer = racingEnvelopes
             mediaSessionID = sessionID
             beginMedia(peer: peer, role: role, capabilities: capabilities)
         default:
