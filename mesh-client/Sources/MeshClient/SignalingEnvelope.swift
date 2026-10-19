@@ -90,10 +90,18 @@ public struct SignalingEnvelope: Codable, Equatable, Sendable {
     public var kind: SignalKind?
     public var data: JSONValue?
     public var code: String?
+    /// Error frames only: the refused envelope's client-supplied
+    /// correlation marker, echoed by the server (the `id` of an
+    /// app-plane chat message, the `sessionID` of a session
+    /// negotiation). Nil when the refused envelope carried no
+    /// marker, and on frames from servers that predate the field —
+    /// both sides tolerate its absence, so the field is additive.
+    public var ref: String?
 
     public init(type: MessageType, meshID: MeshID? = nil, nonce: String? = nil,
                 signature: String? = nil, to: MeshID? = nil, from: MeshID? = nil,
-                kind: SignalKind? = nil, data: JSONValue? = nil, code: String? = nil) {
+                kind: SignalKind? = nil, data: JSONValue? = nil, code: String? = nil,
+                ref: String? = nil) {
         self.type = type
         self.meshID = meshID
         self.nonce = nonce
@@ -103,6 +111,7 @@ public struct SignalingEnvelope: Codable, Equatable, Sendable {
         self.kind = kind
         self.data = data
         self.code = code
+        self.ref = ref
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -115,6 +124,7 @@ public struct SignalingEnvelope: Codable, Equatable, Sendable {
         case kind
         case data
         case code
+        case ref
     }
 
     /// Encodes to the exact JSON text sent on the wire.

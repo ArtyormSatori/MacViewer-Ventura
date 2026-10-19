@@ -172,6 +172,55 @@ struct MeshChatTests {
         #expect(MeshChatHistoryStore(directory: dir).load(peer: bob).first?.delivery == .failed)
     }
 
+    @Test("A correlated refusal fails exactly the marked message, not the oldest in flight")
+    func correlatedRefusalFailsMarkedOnly() async {
+        let dir = tempDir(); defer { cleanup(dir) }
+        let fake = FakeChatSignaling()
+        // Long delivery window: only refusals can settle these.
+        let center = makeCenter(signaling: fake, paired: [bob], directory: dir, window: 30)
+        let model = center.conversation(for: bob, name: nil)
+        model.send(text: "first")
+        model.send(text: "second")
+        await settle("both sends recorded") { fake.sentChatMessages.count == 2 }
+        let wireIDs = fake.sentChatMessages.map(\.id)
+        #expect(wireIDs.count == 2)
+
+        // The server refuses the SECOND message (its ID rides the
+        // error frame's ref): only that one fails.
+        center.handleServerError(.peerOffline, ref: wireIDs[1].uuidString)
+        #expect(model.messages.first { $0.text == "second" }?.delivery == .failed)
+        #expect(model.messages.first { $0.text == "first" }?.delivery == .sending)
+
+        // A later correlated refusal for the first settles it too.
+        center.handleServerError(.peerOffline, ref: wireIDs[0].uuidString)
+        #expect(model.messages.first { $0.text == "first" }?.delivery == .failed)
+        let stored = MeshChatHistoryStore(directory: dir).load(peer: bob)
+        #expect(stored.allSatisfy { $0.delivery == .failed })
+    }
+
+    @Test("A correlated refusal addressed elsewhere fails nothing; the uncorrelated fallback still works")
+    func foreignRefFailsNothing() async {
+        let dir = tempDir(); defer { cleanup(dir) }
+        let fake = FakeChatSignaling()
+        let center = makeCenter(signaling: fake, paired: [bob], directory: dir, window: 30)
+        let model = center.conversation(for: bob, name: nil)
+        model.send(text: "still waiting")
+        await settle("send recorded") { fake.sentChatMessages.count == 1 }
+
+        // A session-plane marker (not a message ID at all)...
+        center.handleServerError(.notPaired, ref: "S-4242")
+        #expect(model.messages.first?.delivery == .sending)
+        // ...and a well-formed UUID that names no message here:
+        // neither may fall through to the global-oldest rule.
+        center.handleServerError(.notPaired, ref: UUID().uuidString)
+        #expect(model.messages.first?.delivery == .sending)
+
+        // An uncorrelated refusal (older server) keeps the
+        // chunk-3 global-oldest attribution.
+        center.handleServerError(.notPaired)
+        #expect(model.messages.first?.delivery == .failed)
+    }
+
     @Test("A transport failure (not connected) fails the message immediately")
     func transportThrowFails() async {
         let dir = tempDir(); defer { cleanup(dir) }

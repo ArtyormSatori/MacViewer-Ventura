@@ -20,31 +20,92 @@ public protocol PairingRecord: Sendable {
 }
 
 /// JSON-file-backed pairing record (`paired-peers.json` in a directory).
+///
+/// Pairings are **scoped per server**: a pairing grant exists only
+/// on the server that created it, so a record learned from server A
+/// must never surface while the client points at server B (it would
+/// offer Connect attempts server B never granted). The record is
+/// constructed for one server (its `MeshServerClient`'s base URL)
+/// and reads/writes only that server's bucket inside the shared
+/// file. The file's v2 shape is
+/// `{"version": 2, "servers": {"<server key>": ["<mesh id>", ...]}}`.
+///
+/// Server identity (see `serverKey(for:)`): the URL's origin —
+/// scheme, host, port — normalized. Path, query and credentials
+/// are NOT part of the identity (no path-variance games: the same
+/// origin under a different path is the same server).
+///
+/// MIGRATION from the v1 shape (a bare JSON array of IDs, written
+/// before records were server-scoped): v1 contents are **not**
+/// attributed to any server — they are dropped from the scoped
+/// view and the file is rewritten in v2 shape on the next write.
+/// Attributing them to whichever server happened to be configured
+/// first would recreate exactly the cross-server leak this scoping
+/// fixes, and the loss is recoverable: the server still holds the
+/// grants, and the record re-learns a pairing the next time it is
+/// observed (approve an inbound request, or a pairing request that
+/// comes back `.alreadyPaired`).
 public final class FilePairingRecord: PairingRecord, @unchecked Sendable {
     private let fileURL: URL
+    private let key: String
     private let lock = NSLock()
-    private var peers: Set<String>
+    private var buckets: [String: Set<String>]
 
-    public init(directory: URL) {
+    /// The on-disk v2 envelope. Decoding a v1 bare array as this
+    /// type fails, which is how the migration rule above detects it.
+    private struct FileShape: Codable {
+        var version: Int
+        var servers: [String: [String]]
+    }
+
+    public init(directory: URL, server: URL) {
         self.fileURL = directory.appendingPathComponent("paired-peers.json")
+        self.key = Self.serverKey(for: server)
         if let data = try? Data(contentsOf: fileURL),
-           let decoded = try? JSONDecoder().decode([String].self, from: data) {
-            self.peers = Set(decoded)
+           let decoded = try? JSONDecoder().decode(FileShape.self, from: data),
+           decoded.version == 2 {
+            self.buckets = decoded.servers.mapValues(Set.init)
         } else {
-            self.peers = []
+            // Missing, corrupt, or a v1 bare array: no scoped data.
+            self.buckets = [:]
         }
+    }
+
+    /// The normalized identity of a server base URL:
+    /// `scheme://host`, plus `:port` when the port is not the
+    /// scheme's default (http/ws 80, https/wss 443). Scheme and host
+    /// are lowercased; an explicit default port collapses away, so
+    /// `http://Example.COM`, `http://example.com:80/` and
+    /// `http://example.com/any/path` are the same server, while
+    /// `https://example.com` and `http://example.com:8080` are not.
+    public static func serverKey(for url: URL) -> String {
+        let scheme = (url.scheme ?? "http").lowercased()
+        let host = (url.host ?? "").lowercased()
+        let displayHost = host.contains(":") ? "[\(host)]" : host // IPv6 literal
+        let defaultPort: Int?
+        switch scheme {
+        case "http", "ws": defaultPort = 80
+        case "https", "wss": defaultPort = 443
+        default: defaultPort = nil
+        }
+        if let port = url.port, port != defaultPort {
+            return "\(scheme)://\(displayHost):\(port)"
+        }
+        return "\(scheme)://\(displayHost)"
     }
 
     public func pairedDevices() -> [MeshID] {
         lock.lock(); defer { lock.unlock() }
-        return peers.sorted().map { MeshID(unchecked: $0) }
+        return (buckets[key] ?? []).sorted().map { MeshID(unchecked: $0) }
     }
 
     public func notePaired(_ peer: MeshID) {
         lock.lock(); defer { lock.unlock() }
-        guard !peers.contains(peer.rawValue) else { return }
-        peers.insert(peer.rawValue)
-        if let data = try? JSONEncoder().encode(peers.sorted()) {
+        guard buckets[key]?.contains(peer.rawValue) != true else { return }
+        buckets[key, default: []].insert(peer.rawValue)
+        let shape = FileShape(version: 2,
+                              servers: buckets.mapValues { $0.sorted() })
+        if let data = try? JSONEncoder().encode(shape) {
             try? FileManager.default.createDirectory(
                 at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? data.write(to: fileURL, options: .atomic)
@@ -52,7 +113,10 @@ public final class FilePairingRecord: PairingRecord, @unchecked Sendable {
     }
 }
 
-/// In-memory pairing record for tests.
+/// In-memory pairing record for tests. Server scoping is a
+/// storage concern: an instance lives and dies with the one
+/// `MeshServerClient` (one server) that owns it, so it needs no
+/// key. Only the file record, which outlives clients, is scoped.
 public final class InMemoryPairingRecord: PairingRecord, @unchecked Sendable {
     private var peers: Set<String> = []
     private let lock = NSLock()

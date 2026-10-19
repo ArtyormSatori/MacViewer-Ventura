@@ -61,7 +61,7 @@ struct Device {
             throw MeshError.transport("no mesh-id in \(dir.path) — run register first")
         }
         return Device(store: store, identity: identity, meshID: meshID,
-                      record: FilePairingRecord(directory: dir), serverURL: server)
+                      record: FilePairingRecord(directory: dir, server: server), serverURL: server)
     }
 }
 
@@ -112,7 +112,7 @@ func run() async throws {
         let invite = options.values["invite"] ?? ""
         let store = FileMeshIdentityStore(directory: dir)
         let identity = try MeshIdentity.loadOrCreate(using: store)
-        let client = MeshServerClient(baseURL: server, pairingRecord: FilePairingRecord(directory: dir))
+        let client = MeshServerClient(baseURL: server, pairingRecord: FilePairingRecord(directory: dir, server: server))
         // A device that already has a Mesh ID re-registers with no
         // invite: the server returns the same ID for a known key.
         let known = try store.loadMeshID()
@@ -142,7 +142,7 @@ func run() async throws {
         emit("PASS pair-approve peer=\(peer.rawValue)")
 
     case "pair-list":
-        let record = FilePairingRecord(directory: dir)
+        let record = FilePairingRecord(directory: dir, server: server)
         let peers = record.pairedDevices()
         emit("PASS pair-listed peers=\(peers.map(\.rawValue).joined(separator: ","))")
 

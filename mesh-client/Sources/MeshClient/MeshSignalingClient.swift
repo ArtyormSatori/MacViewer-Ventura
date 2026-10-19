@@ -1,5 +1,26 @@
 import Foundation
 
+/// A server refusal of one of our sends, as published on
+/// `MeshSignalingClient.serverRefusals`: the typed error plus the
+/// correlation marker the server echoed (`ref` on the error frame).
+///
+/// The marker is the client-supplied identity inside the refused
+/// envelope's app-plane payload — a chat message's `id`, or a
+/// session negotiation's `sessionID` — so a consumer with several
+/// sends in flight can attribute the refusal to exactly one of
+/// them. It is nil when the refused envelope carried no marker
+/// (media-plane payloads never do) or when the server predates the
+/// field; consumers then fall back to their uncorrelated behavior.
+public struct SignalingRefusal: Equatable, Sendable {
+    public let error: MeshError
+    public let ref: String?
+
+    public init(error: MeshError, ref: String?) {
+        self.error = error
+        self.ref = ref
+    }
+}
+
 /// The authenticated WebSocket signaling channel to the mesh server.
 ///
 /// Handshake (server.go `handleSignal`):
@@ -24,6 +45,15 @@ public final class MeshSignalingClient: @unchecked Sendable {
     /// Server-side refusals of our sends, mapped to typed errors.
     public let serverErrors: AsyncStream<MeshError>
     private let errorsContinuation: AsyncStream<MeshError>.Continuation
+    /// The same refusals, enriched with the server's correlation
+    /// echo (`SignalingRefusal.ref`). Every error frame is yielded
+    /// on BOTH streams; consumers that need attribution subscribe
+    /// here, consumers that only need the typed error stay on
+    /// `serverErrors`. An unconsumed stream buffers its values, so
+    /// embedders should consume one stream per refusal consumer,
+    /// not leave both dangling.
+    public let serverRefusals: AsyncStream<SignalingRefusal>
+    private let refusalsContinuation: AsyncStream<SignalingRefusal>.Continuation
 
     private let stateLock = NSLock()
     private var pumpTask: Task<Void, Never>?
@@ -42,6 +72,9 @@ public final class MeshSignalingClient: @unchecked Sendable {
         var errorsCont: AsyncStream<MeshError>.Continuation!
         self.serverErrors = AsyncStream { errorsCont = $0 }
         self.errorsContinuation = errorsCont
+        var refusalsCont: AsyncStream<SignalingRefusal>.Continuation!
+        self.serverRefusals = AsyncStream { refusalsCont = $0 }
+        self.refusalsContinuation = refusalsCont
     }
 
     /// http://host → ws://host/signal, https://host → wss://host/signal
@@ -133,6 +166,7 @@ public final class MeshSignalingClient: @unchecked Sendable {
             stateLock.unlock()
             signalsContinuation.finish()
             errorsContinuation.finish()
+            refusalsContinuation.finish()
         }
         while true {
             let text: String?
@@ -149,7 +183,9 @@ public final class MeshSignalingClient: @unchecked Sendable {
                     signalsContinuation.yield(SignalEnvelope(from: from, kind: kind, data: data))
                 }
             case .error:
-                errorsContinuation.yield(MeshError(signalingCode: envelope.code ?? ""))
+                let error = MeshError(signalingCode: envelope.code ?? "")
+                errorsContinuation.yield(error)
+                refusalsContinuation.yield(SignalingRefusal(error: error, ref: envelope.ref))
             case .pong:
                 break // heartbeat acknowledgement
             default:
@@ -182,5 +218,6 @@ public final class MeshSignalingClient: @unchecked Sendable {
         stateLock.unlock()
         signalsContinuation.finish()
         errorsContinuation.finish()
+        refusalsContinuation.finish()
     }
 }

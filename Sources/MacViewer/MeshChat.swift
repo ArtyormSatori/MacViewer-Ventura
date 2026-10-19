@@ -10,11 +10,13 @@ import MeshClient
 /// gives no positive acknowledgement. An outgoing message is
 /// `.sending` when recorded; if `sendSignal` throws it is
 /// `.failed` at once; if the relay refuses delivery, the refusal
-/// arrives asynchronously on the signaling client's error stream
-/// and the center attributes it to the oldest in-flight send
-/// (`failOldestInFlight`); if no refusal arrives within
-/// `deliveryWindow`, the message settles to `.sent` — "accepted by
-/// the relay", never "read by the peer".
+/// arrives asynchronously on the signaling client's refusal
+/// stream and the center attributes it — exactly, when the
+/// server echoed the message's ID as the refusal's `ref`
+/// (`failInFlight(id:)`); by the oldest in-flight send when the
+/// refusal carries no correlation (older server). If no refusal
+/// arrives within `deliveryWindow`, the message settles to
+/// `.sent` — "accepted by the relay", never "read by the peer".
 @MainActor
 final class MeshChatModel: ChatTransport {
     /// Same cap Mode 1 enforces on its chat (16,384 characters).
@@ -135,6 +137,20 @@ final class MeshChatModel: ChatTransport {
         return true
     }
 
+    /// Fails exactly the in-flight message with this ID — the
+    /// correlated path, when the server echoed the message's own
+    /// ID as the refusal's `ref`. Returns whether that message
+    /// consumed the refusal (false when it is unknown here or
+    /// already settled, e.g. its delivery window expired first).
+    @discardableResult
+    func failInFlight(id: UUID) -> Bool {
+        guard let message = messages.first(where: {
+            $0.id == id && $0.isOutgoing && $0.delivery == .sending
+        }) else { return false }
+        setDelivery(.failed, for: message.id)
+        return true
+    }
+
     /// The signaling connection went away: nothing still in flight
     /// can complete, so it settles as failed.
     func disconnect() {
@@ -203,16 +219,27 @@ final class MeshChatModel: ChatTransport {
 /// Owns every Mode 2 conversation for one signaling connection and
 /// routes what arrives on it (Phase 3, chunk 3). The session
 /// controller is the signaling stream's only subscriber; it hands
-/// non-session envelopes and server refusals to this center through
-/// its fan-out hooks (`MeshSessionController.onUnhandledSignal` /
-/// `onServerError`), wired by `MeshSessionModel`.
+/// non-session envelopes to this center through its fan-out hook
+/// (`MeshSessionController.onUnhandledSignal`), wired by
+/// `MeshSessionModel`. Server refusals reach this center through
+/// the model's own pump over the signaling client's
+/// `serverRefusals` stream, so they arrive with their correlation
+/// echo intact (core-fixes part).
 ///
-/// KNOWN LIMIT (core protocol): server refusals carry no peer or
-/// message correlation, so a refusal is attributed to the globally
-/// oldest in-flight chat send. If a session request is in flight
-/// at the same moment, the session controller independently treats
-/// the same refusal as its own (chunk 2 semantics). A core fix
-/// would echo the refused envelope's marker in the error frame.
+/// REFUSAL ATTRIBUTION (core-fixes part): the server echoes the
+/// refused envelope's app-plane marker as `ref` on its error
+/// frames, and the model feeds this center the signaling client's
+/// `serverRefusals` stream. A refusal with a chat message's ID as
+/// its ref fails exactly that message; a refusal whose ref names
+/// something else (a session negotiation's sessionID) is not the
+/// chat plane's and fails nothing here. Only a refusal with NO
+/// ref — a server that predates the field — falls back to the
+/// original chunk-3 rule: attributed to the globally oldest
+/// in-flight chat send. The session controller still interprets
+/// refusals for its own pending requests independently (chunk 2
+/// semantics); correlation keeps the two planes from consuming
+/// each other's addressed refusals, but an uncorrelated refusal
+/// can still be read by both, exactly as before.
 @MainActor
 final class MeshChatCenter: ObservableObject {
     /// Total unread across all conversations, computed live from
@@ -288,7 +315,8 @@ final class MeshChatCenter: ObservableObject {
         models[peer]?.unreadCount ?? 0
     }
 
-    // MARK: Fan-out entry points (wired to the session controller)
+    // MARK: Fan-out entry points (signals via the session controller,
+    // refusals via the model's refusal pump)
 
     /// A signaling envelope that is not a session message. Chat
     /// messages from paired peers are routed to their conversation;
@@ -299,9 +327,28 @@ final class MeshChatCenter: ObservableObject {
         conversation(for: envelope.from, name: nil).receive(wire)
     }
 
-    /// A server refusal of one of our sends. Attributed to the
-    /// globally oldest in-flight chat send (see the type comment).
+    /// A server refusal of one of our sends, without correlation
+    /// (the shape a server that predates `ref` produces). Attributed
+    /// to the globally oldest in-flight chat send (see the type
+    /// comment).
     func handleServerError(_ error: MeshError) {
+        handleServerError(error, ref: nil)
+    }
+
+    /// A server refusal with its correlation echo. A non-nil `ref`
+    /// attributes the refusal exactly: the message whose ID it
+    /// carries fails, and no other — including when the ref names
+    /// a session negotiation or an unknown/settled message, in
+    /// which case the chat plane does nothing with it. A nil `ref`
+    /// keeps the uncorrelated global-oldest rule.
+    func handleServerError(_ error: MeshError, ref: String?) {
+        if let ref {
+            guard let id = UUID(uuidString: ref) else { return }
+            for model in models.values where model.failInFlight(id: id) {
+                return
+            }
+            return
+        }
         var victim: MeshChatModel?
         var oldest = Date.distantFuture
         for model in models.values {

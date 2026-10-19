@@ -12,7 +12,20 @@ protocol MeshSignalingAPI: Sendable {
     var signals: AsyncStream<SignalEnvelope> { get }
     /// Server-side refusals of our sends (e.g. peer offline).
     var serverErrors: AsyncStream<MeshError> { get }
+    /// The same refusals with the server's correlation echo
+    /// (core-fixes part): a refusal whose envelope carried an
+    /// app-plane marker arrives with `ref` set, so the consumer
+    /// can attribute it to the exact send. Test doubles use the
+    /// default (a stream that never yields); the real
+    /// `MeshSignalingClient` provides the live stream.
+    var serverRefusals: AsyncStream<SignalingRefusal> { get }
     func sendSignal(to peer: MeshID, kind: SignalKind, data: JSONValue) async throws
+}
+
+extension MeshSignalingAPI {
+    var serverRefusals: AsyncStream<SignalingRefusal> {
+        AsyncStream { $0.finish() }
+    }
 }
 
 extension MeshSignalingClient: MeshSignalingAPI {}

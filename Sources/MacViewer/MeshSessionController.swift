@@ -301,9 +301,13 @@ final class MeshSessionController: ObservableObject {
     private func handleServerError(_ error: MeshError) {
         // A server refusal while a request is unanswered means the
         // request could not be delivered (peer offline or grant
-        // missing). Since chunk 3 the chat center also sends on
-        // this channel; refusals carry no correlation, so both
-        // consumers interpret them (see MeshChatCenter's comment).
+        // missing). The chat center no longer rides this hook: it
+        // receives refusals from the model's pump over the
+        // signaling client's `serverRefusals` stream, with the
+        // server's correlation echo, and attributes them exactly
+        // (see MeshChatCenter's comment). This controller keeps
+        // interpreting refusals for its own pending requests
+        // exactly as in chunk 2.
         if case let .outgoingPending(_, peer, peerName, _) = phase {
             finish(.peerUnreachable,
                    message: LF("Could not reach %@.", peerName ?? peer.formatted))

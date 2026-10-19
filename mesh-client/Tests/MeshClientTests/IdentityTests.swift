@@ -87,7 +87,8 @@ final class IdentityTests: XCTestCase {
     }
 
     func testPairingRecordsPersist() throws {
-        let fileRecord = FilePairingRecord(directory: tempDir)
+        let server = URL(string: "http://127.0.0.1:18734")!
+        let fileRecord = FilePairingRecord(directory: tempDir, server: server)
         let a = try MeshID(validating: "111222333")
         let b = try MeshID(validating: "444555666")
         fileRecord.notePaired(b)
@@ -95,7 +96,7 @@ final class IdentityTests: XCTestCase {
         fileRecord.notePaired(a) // duplicate is a no-op
         XCTAssertEqual(fileRecord.pairedDevices(), [a, b])
         // Reloaded from disk by a fresh instance.
-        XCTAssertEqual(FilePairingRecord(directory: tempDir).pairedDevices(), [a, b])
+        XCTAssertEqual(FilePairingRecord(directory: tempDir, server: server).pairedDevices(), [a, b])
 
         let memory = InMemoryPairingRecord()
         memory.notePaired(a)

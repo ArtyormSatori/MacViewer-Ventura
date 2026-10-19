@@ -66,6 +66,9 @@ final class MeshSessionModel: ObservableObject {
     /// connection (Phase 3, chunk 3). Rebuilt with the controller.
     @Published private(set) var chatCenter: MeshChatCenter?
     private var chatForwardSink: AnyCancellable?
+    /// Pumps the signaling client's correlated refusals into the
+    /// chat center. Rebuilt with the connection, like the center.
+    private var refusalPumpTask: Task<Void, Never>?
     /// The WebRTC media coordinator bound to the same signaling
     /// connection (M1 part 3b). Rebuilt with the controller.
     @Published private(set) var mediaCoordinator: MeshMediaCoordinator?
@@ -83,7 +86,7 @@ final class MeshSessionModel: ObservableObject {
          makeSignaling: ((URL, MeshIdentity, MeshID) -> MeshSignalingClient?)? = nil) {
         self.identityStore = identityStore
         self.makeClient = makeClient ?? { url in
-            MeshServerClient(baseURL: url, pairingRecord: FilePairingRecord(directory: Self.supportDirectory))
+            MeshServerClient(baseURL: url, pairingRecord: FilePairingRecord(directory: Self.supportDirectory, server: url))
         }
         self.makeSignaling = makeSignaling ?? { url, identity, meshID in
             MeshSignalingClient(serverBaseURL: url, identity: identity, meshID: meshID)
@@ -185,6 +188,8 @@ final class MeshSessionModel: ObservableObject {
 
     /// Tears down presence. The identity and pairings persist.
     func stop() async {
+        refusalPumpTask?.cancel()
+        refusalPumpTask = nil
         mediaCoordinator?.unbind()
         mediaCoordinator = nil
         mediaForwardSink = nil
@@ -320,6 +325,8 @@ final class MeshSessionModel: ObservableObject {
             isOnline = true
             return
         }
+        refusalPumpTask?.cancel()
+        refusalPumpTask = nil
         mediaCoordinator?.unbind()
         mediaCoordinator = nil
         mediaForwardSink = nil
@@ -369,8 +376,19 @@ final class MeshSessionModel: ObservableObject {
                     coordinator?.routeInbound(envelope)
                     center?.handle(envelope)
                 }
-                controller.onServerError = { [weak center] error in
-                    center?.handleServerError(error)
+                // Refusals reach the chat center through this
+                // pump, not the controller's error hook: only the
+                // `serverRefusals` stream carries the server's
+                // correlation echo, and the center attributes a
+                // correlated refusal to exactly the message it
+                // names (core-fixes part). The controller keeps
+                // consuming `serverErrors` for its own pending
+                // requests, unchanged.
+                refusalPumpTask = Task { [weak center] in
+                    for await refusal in fresh.serverRefusals {
+                        guard let center else { return }
+                        center.handleServerError(refusal.error, ref: refusal.ref)
+                    }
                 }
                 sessionController = controller
                 chatCenter = center
