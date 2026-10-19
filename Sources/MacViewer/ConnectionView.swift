@@ -80,6 +80,9 @@ struct ConnectionView: View {
         .onReceive(mesh.$chatCenter.compactMap { $0 }) { center in
             meshChatWindows.bind(to: center)
         }
+        .onReceive(mesh.$mediaCoordinator.compactMap { $0 }) { coordinator in
+            meshSessionWindows.bindMedia(coordinator)
+        }
         .onChange(of: hosting.identifier) { id in if id == nil { revealPassword = false } }
         .onChange(of: model.phase) { phase in
             if phase == .connecting || phase == .connected { showSession = true }

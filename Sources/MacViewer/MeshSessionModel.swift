@@ -66,6 +66,10 @@ final class MeshSessionModel: ObservableObject {
     /// connection (Phase 3, chunk 3). Rebuilt with the controller.
     @Published private(set) var chatCenter: MeshChatCenter?
     private var chatForwardSink: AnyCancellable?
+    /// The WebRTC media coordinator bound to the same signaling
+    /// connection (M1 part 3b). Rebuilt with the controller.
+    @Published private(set) var mediaCoordinator: MeshMediaCoordinator?
+    private var mediaForwardSink: AnyCancellable?
 
     private let identityStore: any MeshIdentityStore
     private let makeClient: (URL) -> any MeshServerAPI
@@ -181,6 +185,9 @@ final class MeshSessionModel: ObservableObject {
 
     /// Tears down presence. The identity and pairings persist.
     func stop() async {
+        mediaCoordinator?.unbind()
+        mediaCoordinator = nil
+        mediaForwardSink = nil
         chatCenter?.disconnect()
         chatCenter = nil
         chatForwardSink = nil
@@ -313,6 +320,9 @@ final class MeshSessionModel: ObservableObject {
             isOnline = true
             return
         }
+        mediaCoordinator?.unbind()
+        mediaCoordinator = nil
+        mediaForwardSink = nil
         chatCenter?.disconnect()
         chatCenter = nil
         chatForwardSink = nil
@@ -343,7 +353,20 @@ final class MeshSessionModel: ObservableObject {
                     localName: { [weak self] in self?.deviceName ?? "Mac" },
                     historyDirectory: Self.supportDirectory
                         .appendingPathComponent("chat", isDirectory: true))
-                controller.onUnhandledSignal = { [weak center] envelope in
+                let coordinator = MeshMediaCoordinator(
+                    localID: meshID,
+                    makePeerSession: MeshMediaCoordinator.realPeerSessionFactory(
+                        signaling: fresh, localID: meshID),
+                    makeApplier: MeshMediaCoordinator.realApplierFactory)
+                // One fan-out, three planes: the controller has
+                // already claimed session traffic; what remains
+                // is offered to BOTH the media coordinator and
+                // the chat center. Each applies its own codec /
+                // router, so the planes cannot starve each other
+                // (the media router provably ignores app-plane
+                // payloads, the chat codec requires its marker).
+                controller.onUnhandledSignal = { [weak center, weak coordinator] envelope in
+                    coordinator?.routeInbound(envelope)
                     center?.handle(envelope)
                 }
                 controller.onServerError = { [weak center] error in
@@ -351,11 +374,16 @@ final class MeshSessionModel: ObservableObject {
                 }
                 sessionController = controller
                 chatCenter = center
+                mediaCoordinator = coordinator
                 // Views observe this model, not the center: forward
                 // its changes (unread badges, transcripts) upward.
                 chatForwardSink = center.objectWillChange.sink { [weak self] _ in
                     Task { @MainActor [weak self] in self?.objectWillChange.send() }
                 }
+                mediaForwardSink = coordinator.objectWillChange.sink { [weak self] _ in
+                    Task { @MainActor [weak self] in self?.objectWillChange.send() }
+                }
+                coordinator.bind(to: controller)
                 controller.start()
             }
         } catch {

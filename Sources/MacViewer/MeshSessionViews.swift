@@ -65,16 +65,21 @@ struct MeshConsentView: View {
     }
 }
 
-/// The viewer's session window (UI spec W2): in this chunk it shows
-/// the negotiated state — peer, elapsed time, granted capabilities —
-/// and states factually that media arrives with M1. Ending the
-/// session from here ends it on both sides.
+/// The viewer's session window (UI spec W2): the negotiated
+/// state — peer, elapsed time, granted capabilities — and, since
+/// M1 part 3b, the live WebRTC video surface with its Direct /
+/// Relay badge and link stats when the session granted view.
+/// Ending the session from here ends it on both sides.
 struct MeshSessionWindowView: View {
     @ObservedObject var controller: MeshSessionController
     var onClose: () -> Void
     /// Opens the shared chat window with the session's peer
     /// (Phase 3, chunk 3); nil hides the Chat action.
     var onOpenChat: (() -> Void)?
+    /// The media coordinator (M1 part 3b); nil keeps the
+    /// pre-media status line, which stays truthful wherever no
+    /// coordinator is wired.
+    var media: MeshMediaCoordinator?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -104,8 +109,13 @@ struct MeshSessionWindowView: View {
                 }
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
-                Text("Signaling connected · media arrives with the M1 update")
-                    .font(.caption).foregroundStyle(.secondary)
+                if capabilities.contains(.view), let media {
+                    MeshMediaSection(media: media,
+                                     inputEnabled: capabilities.contains(.control))
+                } else if capabilities.contains(.view) {
+                    Text("Signaling connected · media arrives with the M1 update")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 HStack {
                     if let onOpenChat {
                         Button("Chat") { onOpenChat() }
@@ -139,7 +149,17 @@ struct MeshSessionWindowView: View {
             }
         }
         .padding(20)
-        .frame(width: 430)
+        .frame(width: videoActive ? 680 : 430)
+    }
+
+    /// True while the window carries the live video surface —
+    /// the window widens for it (the windows manager re-fits the
+    /// window when the content size changes).
+    private var videoActive: Bool {
+        guard media != nil,
+              case let .active(_, _, _, _, capabilities, _) = controller.phase
+        else { return false }
+        return capabilities.contains(.view)
     }
 
     private func header(peer: MeshID, name: String?) -> some View {
@@ -164,6 +184,60 @@ struct MeshSessionWindowView: View {
     }
 }
 
+/// The live-media block of the viewer's session window (M1
+/// part 3b): the remote video surface, the Direct / Relay path
+/// badge, and the RTT · fps readout (spec §5.6: the badge is
+/// green for Direct, amber for Relay, and a status color is
+/// always paired with its text). The stats refresh once a
+/// second from the coordinator's poll.
+private struct MeshMediaSection: View {
+    @ObservedObject var media: MeshMediaCoordinator
+    let inputEnabled: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            MeshVideoSurfaceView(track: media.remoteVideoTrack,
+                                 inputSender: media.inputSender,
+                                 inputEnabled: inputEnabled)
+                .frame(width: 640, height: 360)
+                .overlay(RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(.primary.opacity(0.12)))
+            HStack(spacing: 8) {
+                if let kind = media.linkKind {
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(kind == .direct ? Color.green : Color.orange)
+                            .frame(width: 8, height: 8)
+                        Text(L(kind == .direct ? "Direct" : "Relay"))
+                            .font(.caption.weight(.medium))
+                    }
+                }
+                if let stats = media.linkStats {
+                    Text(statsText(stats))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            if media.mediaFailed {
+                Label("Media connection failed", systemImage: "exclamationmark.circle.fill")
+                    .font(.caption).foregroundStyle(.red)
+            } else if media.remoteVideoTrack == nil {
+                Text("Connecting media…")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// Only the fields the stats actually carried — an absent
+    /// field is left out, never shown as zero.
+    private func statsText(_ stats: MeshLinkStats) -> String {
+        var parts: [String] = []
+        if let rtt = stats.roundTripMilliseconds { parts.append("\(rtt) ms") }
+        if let fps = stats.receivedFramesPerSecond { parts.append("\(fps) fps") }
+        return parts.joined(separator: " · ")
+    }
+}
+
 /// Owns the two Mode 2 session windows as plain AppKit windows,
 /// independent of the main window's state — a consent request must
 /// not be missable because another app is frontmost (spec §5.4, D8).
@@ -179,6 +253,30 @@ final class MeshSessionWindows: NSObject, NSWindowDelegate {
     /// Opens the shared chat window for a peer (Phase 3, chunk 3);
     /// set by ConnectionView, which owns the chat windows.
     var onOpenChat: ((MeshID, String?) -> Void)?
+    /// The media coordinator (M1 part 3b), bound alongside the
+    /// controller; passed into the session window's content.
+    private weak var media: MeshMediaCoordinator?
+    private var mediaSink: AnyCancellable?
+
+    /// Binds the media coordinator whose state the session
+    /// window shows. Media changes (track arrival, stats) can
+    /// change the content's size, so the window re-fits.
+    func bindMedia(_ coordinator: MeshMediaCoordinator?) {
+        media = coordinator
+        mediaSink?.cancel()
+        mediaSink = coordinator?.objectWillChange.sink { [weak self] _ in
+            Task { @MainActor [weak self] in self?.refitSessionWindow() }
+        }
+    }
+
+    private func refitSessionWindow() {
+        guard let window = sessionWindow, let content = window.contentView
+        else { return }
+        let size = content.fittingSize
+        guard size.width > 0, size.height > 0,
+              window.contentView?.frame.size != size else { return }
+        window.setContentSize(size)
+    }
 
     func bind(to controller: MeshSessionController) {
         guard self.controller !== controller else { return }
@@ -259,7 +357,8 @@ final class MeshSessionWindows: NSObject, NSWindowDelegate {
                               case let .active(_, peer, peerName, _, _, _) = controller.phase
                         else { return }
                         self?.onOpenChat?(peer, peerName)
-                    }),
+                    },
+                    media: media),
                 floating: false)
             window.delegate = self
             sessionWindow = window

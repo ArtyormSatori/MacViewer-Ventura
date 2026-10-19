@@ -24,7 +24,8 @@ struct MeshModeView: View {
                 } else {
                     thisDeviceCard
                     if let controller = mesh.sessionController {
-                        MeshSessionBanner(controller: controller)
+                        MeshSessionBanner(controller: controller,
+                                          media: mesh.mediaCoordinator)
                     }
                     connectBlock
                     if !mesh.pendingRequests.isEmpty { requestsCard }
@@ -329,6 +330,11 @@ struct MeshModeView: View {
 /// where a live session is seen and ended.
 private struct MeshSessionBanner: View {
     @ObservedObject var controller: MeshSessionController
+    /// The media coordinator (M1 part 3b): on the host side its
+    /// capture state is part of this strip — the host has no
+    /// session window, so a capture failure must land here,
+    /// never silently.
+    var media: MeshMediaCoordinator?
 
     var body: some View {
         switch controller.phase {
@@ -342,16 +348,21 @@ private struct MeshSessionBanner: View {
                     .buttonStyle(.bordered).controlSize(.small)
             }
         case let .active(_, peer, peerName, role, _, _):
-            strip {
-                Image(systemName: "dot.radiowaves.left.and.right")
-                    .foregroundStyle(.green)
-                Text(role == .host
-                     ? LF("%@ is connected to this device.", peerName ?? peer.formatted)
-                     : LF("Connected to %@.", peerName ?? peer.formatted))
-                    .font(.callout.weight(.medium))
-                Spacer()
-                Button("End session", role: .destructive) { controller.endSession() }
-                    .buttonStyle(.bordered).controlSize(.small)
+            VStack(alignment: .leading, spacing: 6) {
+                strip {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .foregroundStyle(.green)
+                    Text(role == .host
+                         ? LF("%@ is connected to this device.", peerName ?? peer.formatted)
+                         : LF("Connected to %@.", peerName ?? peer.formatted))
+                        .font(.callout.weight(.medium))
+                    Spacer()
+                    Button("End session", role: .destructive) { controller.endSession() }
+                        .buttonStyle(.bordered).controlSize(.small)
+                }
+                if role == .host, let media {
+                    MeshHostMediaLine(media: media)
+                }
             }
         case .ended:
             strip {
@@ -374,5 +385,27 @@ private struct MeshSessionBanner: View {
             .background(Color(nsColor: .controlBackgroundColor),
                         in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.primary.opacity(0.09)))
+    }
+}
+
+/// The host-side media line under the session strip (M1 part
+/// 3b): "Sharing screen" while capture runs, or the capture
+/// failure in plain words. Never silent either way.
+private struct MeshHostMediaLine: View {
+    @ObservedObject var media: MeshMediaCoordinator
+
+    var body: some View {
+        if let error = media.hostCaptureError {
+            Label(LF("Screen sharing failed: %@", error),
+                  systemImage: "exclamationmark.circle.fill")
+                .font(.caption).foregroundStyle(.red)
+                .fixedSize(horizontal: false, vertical: true)
+        } else if media.isSharingScreen {
+            HStack(spacing: 5) {
+                Circle().fill(Color.green).frame(width: 7, height: 7)
+                Text("Sharing screen")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
     }
 }

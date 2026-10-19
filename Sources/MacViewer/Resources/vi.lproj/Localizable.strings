@@ -420,3 +420,9 @@
 "Type a message…" = "Nhập tin nhắn…";
 "No messages yet." = "Chưa có tin nhắn nào.";
 "%@ is offline. Chat works while both devices are connected to the mesh server." = "%@ đang ngoại tuyến. Trò chuyện hoạt động khi cả hai thiết bị cùng kết nối tới máy chủ mesh.";
+"Direct" = "Trực tiếp";
+"Relay" = "Qua relay";
+"Connecting media…" = "Đang kết nối hình ảnh…";
+"Media connection failed" = "Kết nối hình ảnh thất bại";
+"Sharing screen" = "Đang chia sẻ màn hình";
+"Screen sharing failed: %@" = "Chia sẻ màn hình thất bại: %@";

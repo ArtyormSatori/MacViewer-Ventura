@@ -420,3 +420,9 @@
 "Type a message…" = "Type a message…";
 "No messages yet." = "No messages yet.";
 "%@ is offline. Chat works while both devices are connected to the mesh server." = "%@ is offline. Chat works while both devices are connected to the mesh server.";
+"Direct" = "Direct";
+"Relay" = "Relay";
+"Connecting media…" = "Connecting media…";
+"Media connection failed" = "Media connection failed";
+"Sharing screen" = "Sharing screen";
+"Screen sharing failed: %@" = "Screen sharing failed: %@";
