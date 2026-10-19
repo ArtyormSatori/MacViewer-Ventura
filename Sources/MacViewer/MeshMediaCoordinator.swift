@@ -128,7 +128,7 @@ final class MeshMediaCoordinator: ObservableObject {
 
     private let localID: MeshID
     private let makePeerSession: (MeshPeerRole, MeshID) -> MeshPeerSessioning
-    private let makeApplier: (Bool, @escaping () -> MeshDisplaySize?) -> MeshInputApplying
+    private let makeApplier: (Bool, @escaping @Sendable () -> MeshDisplaySize?) -> MeshInputApplying
 
     private weak var controller: MeshSessionController?
     private var phaseCancellable: AnyCancellable?
@@ -146,7 +146,7 @@ final class MeshMediaCoordinator: ObservableObject {
 
     init(localID: MeshID,
          makePeerSession: @escaping (MeshPeerRole, MeshID) -> MeshPeerSessioning,
-         makeApplier: @escaping (Bool, @escaping () -> MeshDisplaySize?) -> MeshInputApplying) {
+         makeApplier: @escaping (Bool, @escaping @Sendable () -> MeshDisplaySize?) -> MeshInputApplying) {
         self.localID = localID
         self.makePeerSession = makePeerSession
         self.makeApplier = makeApplier

@@ -194,7 +194,7 @@ final class MeshRemoteVideoNSView: NSView {
     // MARK: Keyboard
 
     override func keyDown(with event: NSEvent) {
-        guard inputEnabled else { super.keyDown(event); return }
+        guard inputEnabled else { super.keyDown(with: event); return }
         let flags = meshInputModifiers(from: event.modifierFlags)
         MainActor.assumeIsolated {
             inputSender?.send(.key(code: event.keyCode, down: true, flags: flags))
@@ -202,7 +202,7 @@ final class MeshRemoteVideoNSView: NSView {
     }
 
     override func keyUp(with event: NSEvent) {
-        guard inputEnabled else { super.keyUp(event); return }
+        guard inputEnabled else { super.keyUp(with: event); return }
         let flags = meshInputModifiers(from: event.modifierFlags)
         MainActor.assumeIsolated {
             inputSender?.send(.key(code: event.keyCode, down: false, flags: flags))
@@ -210,7 +210,7 @@ final class MeshRemoteVideoNSView: NSView {
     }
 
     override func flagsChanged(with event: NSEvent) {
-        guard inputEnabled else { super.flagsChanged(event); return }
+        guard inputEnabled else { super.flagsChanged(with: event); return }
         let flags = meshInputModifiers(from: event.modifierFlags)
         MainActor.assumeIsolated {
             inputSender?.send(.modifiers(flags))
