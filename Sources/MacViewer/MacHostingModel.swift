@@ -26,6 +26,13 @@ final class MacHostingModel: ObservableObject {
 
     private var engine: UltraViewerHostSession?
     let tools = SessionToolsModel()
+    /// The app's shared Mode 1 chat center (Phase 3, Mode-1 chat
+    /// seam): the same instance `ConnectionModel` owns, assigned
+    /// by the composition root, so an incoming session binds its
+    /// tools to the same per-partner conversations as outgoing
+    /// sessions. Nil until assigned; chat binding is skipped
+    /// while unset and the legacy chat flow is unaffected.
+    var chatCenter: UltraViewerChatCenter?
     private var reader: Task<Void, Never>?
     private var captureTask: Task<Void, Never>?
     private var controlTask: Task<Void, Never>?
@@ -178,6 +185,7 @@ final class MacHostingModel: ObservableObject {
                         // send operation resumes. Preserve that approved task;
                         // a new request, local stop, or local end cancels it.
                         if !isApprovingSideSwitch { cancelSideSwitch() }
+                        chatCenter?.unbind(tools: tools)
                         tools.deactivate()
                         cancelControlUpdate(); isEndingViewer = false
                         captureGeneration = UUID()
@@ -192,6 +200,7 @@ final class MacHostingModel: ObservableObject {
             } catch {
                 guard generation == token else { return }
                 endSleepPrevention()
+                chatCenter?.unbind(tools: tools)
                 tools.deactivate()
                 cancelSideSwitch()
                 cancelControlUpdate(); isEndingViewer = false
@@ -293,6 +302,7 @@ final class MacHostingModel: ObservableObject {
     }
 
     func endViewer() {
+        chatCenter?.unbind(tools: tools)
         tools.deactivate()
         guard !isEndingViewer else { return }
         cancelSideSwitch()
@@ -354,6 +364,7 @@ final class MacHostingModel: ObservableObject {
 
     func stop() {
         endSleepPrevention()
+        chatCenter?.unbind(tools: tools)
         tools.deactivate()
         cancelSideSwitch()
         cancelControlUpdate(); isEndingViewer = false
@@ -405,6 +416,14 @@ final class MacHostingModel: ObservableObject {
             guard let self, generation == token, viewer?.id == viewerID, phase == .sharing else { throw CancellationError() }
             try await session.sendTyping(typing, session: viewerID)
         })
+        // Bind the shared chat window's conversation for this
+        // viewer, keyed by the viewer's own UltraViewer ID — the
+        // same conversation an outgoing session to that ID uses.
+        if let chatCenter, let viewer, !viewer.viewerID.isEmpty {
+            chatCenter.bind(tools: tools,
+                            partner: UltraViewerChatPartner(id: viewer.viewerID,
+                                                            name: viewer.displayName))
+        }
     }
 
     private func captureNextFrame(_ ticket: UUID, token: UUID, session: UltraViewerHostSession) {

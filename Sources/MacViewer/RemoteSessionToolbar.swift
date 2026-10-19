@@ -45,6 +45,9 @@ struct RemoteSessionToolbarCallbacks {
     var showRemoteCursor = true
     var setShowRemoteCursor: ((Bool) -> Void)? = nil
     var switchSides: (() -> Void)? = nil
+    /// Opens the shared floating chat window (Phase 3, Mode-1
+    /// chat seam) for the current partner; nil hides the button.
+    var openSharedChat: (() -> Void)? = nil
 }
 
 @MainActor
@@ -60,6 +63,9 @@ struct RemoteSessionToolbar: View {
     @ObservedObject var capture: RemoteCaptureController
     let image: CGImage?
     let callbacks: RemoteSessionToolbarCallbacks
+    /// The current partner's shared-window conversation, when a
+    /// chat center binding exists (Phase 3, Mode-1 chat seam).
+    var chatModel: UltraViewerChatModel? = nil
     @State private var confirmRestart = false
     @State private var showCustomQuality = false
     @State private var customQuality = 45.0
@@ -79,6 +85,9 @@ struct RemoteSessionToolbar: View {
             configurationMenu
             captureMenu
             SessionToolsButton(tools: tools, peerName: peerName, context: "Outgoing", onOpen: callbacks.releaseInput)
+            if let chatModel, let openSharedChat = callbacks.openSharedChat {
+                UltraViewerChatButton(model: chatModel, onOpen: openSharedChat)
+            }
             Divider().frame(height: 23)
             Toggle("Control", isOn: $controlEnabled).toggleStyle(.switch)
                 .disabled(!isConnected || !allowsControl).fixedSize()

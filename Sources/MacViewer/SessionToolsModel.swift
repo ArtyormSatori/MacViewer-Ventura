@@ -9,6 +9,25 @@ struct SessionChatMessage: Identifiable, Equatable {
     let isOutgoing: Bool
 }
 
+/// The outcome of one message-level chat send (see
+/// `SessionToolsModel.sendChatMessage(_:)`). The UltraViewer
+/// protocol has no acknowledgement and no read receipt, so the
+/// strongest claim a completed send supports is that the text was
+/// handed to the session's socket path — never that the partner
+/// saw it. The shared chat window maps `.handedToSocket` to its
+/// "Sent" caption on exactly that basis.
+enum ChatSendOutcome: Equatable, Sendable {
+    /// Refused locally: whitespace-only or over the
+    /// 16,384-character cap. The transport was never touched.
+    case refused
+    /// The send closure completed without throwing: the text was
+    /// handed to the session's socket path.
+    case handedToSocket
+    /// The send closure threw, or the session ended before the
+    /// send could run (or while it was in flight).
+    case failed
+}
+
 /// Per-session text tools. Clipboard polling starts only after an explicit
 /// toggle and successful protocol setup; existing clipboard contents are not
 /// sent when sharing is enabled. Nothing is persisted to disk.
@@ -27,6 +46,18 @@ final class SessionToolsModel: ObservableObject {
     typealias SendText = @MainActor (String) async throws -> Void
     typealias SetSharing = @MainActor (Bool) async throws -> Void
     typealias SendTyping = @MainActor (Bool) async throws -> Void
+
+    /// Mirrors for the shared floating chat window (Phase 3,
+    /// Mode-1 seam). Set by `UltraViewerChatCenter` while a
+    /// session is bound to a persistent conversation; nil in the
+    /// legacy-only flow, and behavior is identical while unset.
+    /// `onChatMessageReceived` fires for every accepted inbound
+    /// message; `onDraftMessageSent` fires after a `sendDraft()`
+    /// send completes (the draft path appends only on success, so
+    /// this reports a completed send, never an attempt).
+    var onChatMessageReceived: (@MainActor (String) -> Void)?
+    var onDraftMessageSent: (@MainActor (String) -> Void)?
+
     private var sendChat: SendText?
     private var sendClipboard: SendText?
     private var setSharing: SetSharing?
@@ -37,6 +68,9 @@ final class SessionToolsModel: ObservableObject {
     private var generation = UUID()
     private var clipboardGeneration = UUID()
     private var chatTask: Task<Void, Never>?
+    private var chatSendQueue: [ChatSendJob] = []
+    private var inFlightChatSend: ChatSendJob?
+    private var chatSendWorker: Task<Void, Never>?
     private var clipboardTask: Task<Void, Never>?
     private var clipboardSetup: Task<Void, Never>?
     private var clipboardChange = 0
@@ -65,6 +99,19 @@ final class SessionToolsModel: ObservableObject {
     func deactivate() {
         generation = UUID(); clipboardGeneration = UUID()
         chatTask?.cancel(); chatTask = nil
+        // Settle every message-level send: nothing queued or in
+        // flight may outlive the session, and no caller may be
+        // left awaiting an outcome that can no longer arrive. The
+        // send worker is deliberately not cancelled: it observes
+        // the drained queue, settles its current job as a no-op
+        // (settling is idempotent), and exits on its own, so a
+        // send enqueued by a following activate() is never left
+        // without a worker.
+        inFlightChatSend?.settle(.failed); inFlightChatSend = nil
+        for job in chatSendQueue { job.settle(.failed) }
+        chatSendQueue.removeAll()
+        onChatMessageReceived = nil
+        onDraftMessageSent = nil
         typingTask?.cancel(); typingTask = nil
         peerTypingTask?.cancel(); peerTypingTask = nil; peerIsTyping = false
         clipboardTask?.cancel(); clipboardTask = nil
@@ -89,6 +136,7 @@ final class SessionToolsModel: ObservableObject {
                 try await sendChat(text)
                 guard generation == token, isActive else { return }
                 append(text, outgoing: true)
+                onDraftMessageSent?(text)
                 if draft == text { draft = "" }
             } catch {
                 guard generation == token, isActive, !Task.isCancelled else { return }
@@ -98,10 +146,68 @@ final class SessionToolsModel: ObservableObject {
         }
     }
 
+    /// Message-level chat send for the shared chat window: sends
+    /// `text` and reports the outcome for exactly this message,
+    /// without reading or modifying `draft` and without appending
+    /// to the legacy transcript (the caller's conversation model
+    /// keeps its own record). Sends serialize through a FIFO
+    /// queue: a call made while another send is in flight waits
+    /// its turn instead of being refused — the draft path's
+    /// single-flight gate is a UI convenience, not a transport
+    /// limit, and the session underneath serializes its own
+    /// sends. Whitespace-only and over-cap text is refused
+    /// locally and never reaches the transport.
+    func sendChatMessage(_ text: String) async -> ChatSendOutcome {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              text.utf16.count <= 16_384 else { return .refused }
+        guard isActive, sendChat != nil else { return .failed }
+        let token = generation
+        return await withCheckedContinuation { continuation in
+            chatSendQueue.append(ChatSendJob(text: text, token: token,
+                                             continuation: continuation))
+            startChatSendWorkerIfNeeded()
+        }
+    }
+
+    private func startChatSendWorkerIfNeeded() {
+        guard chatSendWorker == nil else { return }
+        chatSendWorker = Task { [weak self] in
+            // One strong unwrap for the worker's whole life:
+            // per-iteration `while let self` unwrapping left
+            // later statements seeing the optional self again
+            // (Swift 6 rejects the implicit access). deactivate()
+            // settles queued jobs as failed, so a held-alive
+            // worker still drains promptly at session end.
+            guard let self else { return }
+            while !chatSendQueue.isEmpty {
+                let job = chatSendQueue.removeFirst()
+                inFlightChatSend = job
+                guard job.token == generation, isActive, let sendChat else {
+                    job.settle(.failed)
+                    if inFlightChatSend === job { inFlightChatSend = nil }
+                    continue
+                }
+                do {
+                    try await sendChat(job.text)
+                    // A send that completes after the session
+                    // turned over did not deliver in this session
+                    // (same rule as the draft path's append).
+                    job.settle(job.token == generation && isActive
+                               ? .handedToSocket : .failed)
+                } catch {
+                    job.settle(.failed)
+                }
+                if inFlightChatSend === job { inFlightChatSend = nil }
+            }
+            chatSendWorker = nil
+        }
+    }
+
     func receiveChat(_ text: String) {
         guard isActive, text.utf16.count <= 16_384 else { return }
         receiveTyping(false)
         append(text, outgoing: false)
+        onChatMessageReceived?(text)
     }
 
     func receiveTyping(_ typing: Bool) {
@@ -195,6 +301,29 @@ final class SessionToolsModel: ObservableObject {
         catch {
             guard generation == token, clipboardGeneration == revision, !Task.isCancelled else { return }
             errorMessage = "Clipboard text could not be sent."
+        }
+    }
+
+    /// One queued message-level send. A reference type so the
+    /// send worker and `deactivate()` can race to settle it
+    /// exactly once (every access is on the main actor).
+    private final class ChatSendJob {
+        let text: String
+        let token: UUID
+        let continuation: CheckedContinuation<ChatSendOutcome, Never>
+        private(set) var settled = false
+
+        init(text: String, token: UUID,
+             continuation: CheckedContinuation<ChatSendOutcome, Never>) {
+            self.text = text
+            self.token = token
+            self.continuation = continuation
+        }
+
+        func settle(_ outcome: ChatSendOutcome) {
+            guard !settled else { return }
+            settled = true
+            continuation.resume(returning: outcome)
         }
     }
 

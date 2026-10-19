@@ -9,6 +9,18 @@ let package = Package(
         .library(name: "UltraViewerProtocol", targets: ["UltraViewerProtocol"]),
         .executable(name: "MacViewer", targets: ["MacViewer"]),
     ],
+    dependencies: [
+        // Mode 2 (self-hosted mesh, 5.0): the verified mesh client core
+        // lives in its own package next to this one. Path dependency so
+        // the two trees evolve together until the mesh ships in a release.
+        .package(path: "mesh-client"),
+        // The same libwebrtc pin mesh-client builds against (its
+        // manifest pins it exactly). Declared here only so the app
+        // tests can name framework types (RTCVideoTrack) directly,
+        // the same reason mesh-client's own test target depends on
+        // it; the app itself links it transitively via MeshWebRTC.
+        .package(url: "https://github.com/stasel/WebRTC.git", exact: "155.0.0"),
+    ],
     targets: [
         .target(
             name: "CG722",
@@ -43,9 +55,15 @@ let package = Package(
         ),
         .target(name: "UltraViewerProtocol", dependencies: ["CZstd", "CG722"],
                 resources: [.copy("Resources/8bit.dat")]),
-        .executableTarget(name: "MacViewer", dependencies: ["UltraViewerProtocol"],
+        .executableTarget(name: "MacViewer",
+                          dependencies: ["UltraViewerProtocol",
+                                         .product(name: "MeshClient", package: "mesh-client"),
+                                         .product(name: "MeshWebRTC", package: "mesh-client")],
                           resources: [.process("Resources")]),
         .testTarget(name: "UltraViewerProtocolTests", dependencies: ["UltraViewerProtocol"]),
-        .testTarget(name: "MacViewerTests", dependencies: ["MacViewer"]),
+        .testTarget(name: "MacViewerTests", dependencies: [
+            "MacViewer",
+            .product(name: "WebRTC", package: "WebRTC"),
+        ]),
     ]
 )
