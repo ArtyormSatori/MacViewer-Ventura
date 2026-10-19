@@ -31,6 +31,12 @@ jobs:
           set -o pipefail
           swift test --parallel 2>&1 | tee -a "$GITHUB_WORKSPACE/build-log.txt"
 
+      - name: Run mesh-client tests (incl. WebRTC spike)
+        working-directory: mesh-client
+        run: |
+          set -o pipefail
+          swift test 2>&1 | tee -a "$GITHUB_WORKSPACE/build-log.txt"
+
       - name: Upload build log (always)
         if: always()
         env:
