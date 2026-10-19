@@ -426,3 +426,4 @@
 "Media connection failed" = "Kết nối hình ảnh thất bại";
 "Sharing screen" = "Đang chia sẻ màn hình";
 "Screen sharing failed: %@" = "Chia sẻ màn hình thất bại: %@";
+"%@ is not connected. Chat works during a session with this computer." = "%@ chưa kết nối. Trò chuyện chỉ hoạt động trong phiên kết nối với máy tính này.";

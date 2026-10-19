@@ -426,3 +426,4 @@
 "Media connection failed" = "Media connection failed";
 "Sharing screen" = "Sharing screen";
 "Screen sharing failed: %@" = "Screen sharing failed: %@";
+"%@ is not connected. Chat works during a session with this computer." = "%@ is not connected. Chat works during a session with this computer.";

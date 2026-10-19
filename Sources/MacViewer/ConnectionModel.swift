@@ -88,6 +88,13 @@ final class ConnectionModel: ObservableObject {
 
     let adapter: any MacViewerSessionAdapter
     let tools = SessionToolsModel()
+    /// Mode 1 conversations for the shared floating chat window
+    /// (Phase 3, Mode-1 chat seam). Sessions bind their tools to
+    /// the current partner's conversation on connect and unbind
+    /// on session end; `MacHostingModel` shares this instance
+    /// (assigned by the composition root) so both directions key
+    /// the same conversations.
+    let chatCenter: UltraViewerChatCenter
     private let defaults: UserDefaults
     private let credentials: any PartnerCredentialStore
     private let audioPlayer: any RemoteAudioPlayback
@@ -123,10 +130,13 @@ final class ConnectionModel: ObservableObject {
     init(adapter: any MacViewerSessionAdapter, defaults: UserDefaults = .standard,
          credentials: (any PartnerCredentialStore)? = nil,
          audioPlayer: (any RemoteAudioPlayback)? = nil, inputBufferCapacity: Int = 8192,
-         inputSendTimeout: Duration = .seconds(5)) {
+         inputSendTimeout: Duration = .seconds(5),
+         chatHistoryDirectory: URL? = nil) {
         precondition(inputBufferCapacity > 0)
         self.adapter = adapter
         self.inputSendTimeout = inputSendTimeout
+        self.chatCenter = UltraViewerChatCenter(
+            historyDirectory: chatHistoryDirectory ?? Self.defaultChatHistoryDirectory)
         self.defaults = defaults
         self.credentials = credentials ?? KeychainPartnerCredentialStore()
         self.audioPlayer = audioPlayer ?? RemoteAudioPlayer()
@@ -152,6 +162,17 @@ final class ConnectionModel: ObservableObject {
 
     private static func normalizeID(_ identifier: String) -> String {
         identifier.filter { !$0.isWhitespace && $0 != "-" }
+    }
+
+    /// The chat history directory Mode 2 also uses
+    /// (Application Support/MacViewer/chat); the two modes'
+    /// stores namespace their files inside it.
+    private static var defaultChatHistoryDirectory: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory,
+                                            in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return base.appendingPathComponent("MacViewer", isDirectory: true)
+            .appendingPathComponent("chat", isDirectory: true)
     }
 
     func setRememberPassword(_ enabled: Bool) {
@@ -247,6 +268,7 @@ final class ConnectionModel: ObservableObject {
         stopAudio()
         cursorPresenter.reset()
         remoteCursor = nil
+        chatCenter.unbind(tools: tools)
         tools.deactivate()
         adapter.disconnect()
         phase = .disconnected
@@ -515,6 +537,14 @@ final class ConnectionModel: ObservableObject {
                 guard let self, generation == token, phase == .connected else { throw CancellationError() }
                 try await adapter.sendTyping(typing)
             })
+            // The shared chat window's conversation for this
+            // partner: keyed by the session-reported ID, persistent
+            // across sessions. A reconnect re-binds the same
+            // conversation (the binding follows the tools, and
+            // this handler re-runs on resume by design above).
+            chatCenter.bind(tools: tools,
+                            partner: UltraViewerChatPartner(id: info.partnerID,
+                                                            name: info.displayName))
         case let .frame(newFrame):
             // The frame has left the adapter's presentation pipeline
             // whether it is shown or discarded by the phase guard;
@@ -586,6 +616,7 @@ final class ConnectionModel: ObservableObject {
         resetControlPosture()
         stopAudio()
         cursorPresenter.reset(); remoteCursor = nil
+        chatCenter.unbind(tools: tools)
         tools.deactivate()
         adapter.disconnect()
         phase = .disconnected
@@ -605,6 +636,7 @@ final class ConnectionModel: ObservableObject {
         resetControlPosture()
         stopAudio()
         cursorPresenter.reset(); remoteCursor = nil
+        chatCenter.unbind(tools: tools)
         tools.deactivate()
         adapter.disconnect()
         phase = .disconnected

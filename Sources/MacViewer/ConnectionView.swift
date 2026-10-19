@@ -12,6 +12,7 @@ struct ConnectionView: View {
     @StateObject private var mesh = MeshSessionModel()
     @State private var meshSessionWindows = MeshSessionWindows()
     @State private var meshChatWindows = MeshChatWindows()
+    @State private var uvChatWindows = UltraViewerChatWindows()
     @AppStorage(AppMode.defaultsKey) private var appMode = AppMode.ultraViewer
     @AppStorage(MeshDefaults.serverAddressKey) private var meshServerAddress = ""
     @State private var remoteDisplayScale: RemoteDisplayScale = .fit
@@ -48,6 +49,11 @@ struct ConnectionView: View {
         }
         .onAppear {
             focusedField = .partner
+            // One Mode 1 chat center for both directions: the
+            // hosting model binds its sessions into the same
+            // conversations the outgoing model owns.
+            uvChatWindows.bind(to: model.chatCenter)
+            hosting.chatCenter = model.chatCenter
             hosting.onApprovedSideSwitch = { id, password in
                 model.disconnect()
                 model.partnerID = id; model.password = password
@@ -373,6 +379,14 @@ struct ConnectionView: View {
                     HStack {
                         SessionToolsButton(tools: hosting.tools, peerName: incomingPeerName, context: "Incoming")
                             .buttonStyle(.bordered)
+                        if let viewerID = hosting.viewer?.viewerID,
+                           let chatModel = model.chatCenter.conversationIfExists(forPartnerID: viewerID) {
+                            UltraViewerChatButton(model: chatModel) {
+                                uvChatWindows.show(partner: UltraViewerChatPartner(
+                                    id: viewerID, name: hosting.viewer?.displayName))
+                            }
+                            .buttonStyle(.bordered)
+                        }
                         Button("End session", role: .destructive, action: hosting.endViewer)
                             .buttonStyle(.bordered).disabled(hosting.isEndingViewer)
                         Spacer(minLength: 0)
@@ -417,6 +431,14 @@ struct ConnectionView: View {
 
     private var incomingPeerName: String {
         hosting.viewer?.displayName ?? hosting.viewer?.viewerID ?? "Windows computer"
+    }
+
+    /// The outgoing session's chat partner identity (Phase 3,
+    /// Mode-1 chat seam): the session-reported UltraViewer ID and
+    /// display name, in the same terms the chat center binds.
+    private var currentChatPartner: UltraViewerChatPartner? {
+        guard let info = model.remoteInfo else { return nil }
+        return UltraViewerChatPartner(id: info.partnerID, name: info.displayName)
     }
 
     private var incomingControlDisabled: Bool {
@@ -535,7 +557,15 @@ struct ConnectionView: View {
                                  isChangingAudio: model.isChangingAudio,
                                  setComputerAudioEnabled: model.setComputerAudioEnabled,
                                  showRemoteCursor: model.showRemoteCursor,
-                                 setShowRemoteCursor: model.setShowRemoteCursor))
+                                 setShowRemoteCursor: model.setShowRemoteCursor,
+                                 openSharedChat: {
+                                     if let partner = currentChatPartner {
+                                         uvChatWindows.show(partner: partner)
+                                     }
+                                 }),
+                chatModel: currentChatPartner.flatMap {
+                    model.chatCenter.conversationIfExists(forPartnerID: $0.id)
+                })
             Divider()
             }
             if let error = model.errorMessage { errorLabel(error).padding(16) }
