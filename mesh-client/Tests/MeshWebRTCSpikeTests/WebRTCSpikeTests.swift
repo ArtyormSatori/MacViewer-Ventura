@@ -104,7 +104,7 @@ final class WebRTCSpikeTests: XCTestCase {
     private final class EchoServer: NSObject, RTCDataChannelDelegate {
         func dataChannelDidChangeState(_ dataChannel: RTCDataChannel) {}
         func dataChannel(_ dataChannel: RTCDataChannel, didReceiveMessageWith buffer: RTCDataBuffer) {
-            dataChannel.send(RTCDataBuffer(data: buffer.data, isBinary: buffer.isBinary))
+            _ = dataChannel.sendData(RTCDataBuffer(data: buffer.data, isBinary: buffer.isBinary))
         }
     }
 
@@ -200,7 +200,7 @@ final class WebRTCSpikeTests: XCTestCase {
                       case .number(let index)? = fields["sdpMLineIndex"]
                 else { return }
                 peer.addRemoteCandidate(RTCIceCandidate(
-                    sdp: candidateSDP, sdpMid: mid, sdpMLineIndex: Int32(index)))
+                    sdp: candidateSDP, sdpMLineIndex: Int32(index), sdpMid: mid))
             case nil:
                 return
             }
@@ -240,7 +240,7 @@ final class WebRTCSpikeTests: XCTestCase {
         var received: Data?
         echoClient.onOpen = {
             channelOpened.fulfill()
-            XCTAssertTrue(channel.send(RTCDataBuffer(data: payload, isBinary: true)))
+            XCTAssertTrue(channel.sendData(RTCDataBuffer(data: payload, isBinary: true)))
         }
         echoClient.onMessage = { data in
             received = data
