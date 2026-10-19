@@ -5,6 +5,18 @@ import MeshClient
 import MeshWebRTC
 import WebRTC
 
+/// Lock-protected hand-off of the size actually being streamed,
+/// written on the main actor when capture starts and read from
+/// the applier's `@Sendable` display-size provider (which runs
+/// on WebRTC threads, where the coordinator's main-actor state
+/// is unreachable).
+private final class StreamedSizeBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var size: MeshDisplaySize?
+    func update(_ newValue: MeshDisplaySize?) { lock.withLock { size = newValue } }
+    func read() -> MeshDisplaySize? { lock.withLock { size } }
+}
+
 /// How the current media path reaches the peer, for the session
 /// window's badge. Driven by the selected candidate pair's
 /// local candidate type: a host / server-reflexive /
@@ -129,6 +141,7 @@ final class MeshMediaCoordinator: ObservableObject {
     private let localID: MeshID
     private let makePeerSession: (MeshPeerRole, MeshID) -> MeshPeerSessioning
     private let makeApplier: (Bool, @escaping @Sendable () -> MeshDisplaySize?) -> MeshInputApplying
+    private let streamedSizeBox = StreamedSizeBox()
 
     private weak var controller: MeshSessionController?
     private var phaseCancellable: AnyCancellable?
@@ -271,8 +284,9 @@ final class MeshMediaCoordinator: ObservableObject {
             // streamed) it falls back to the main display's real
             // size, which is what the viewer's normalized input
             // describes.
-            let applier = makeApplier(capabilities.contains(.control)) { [weak self] in
-                self?.capture?.streamedSize ?? Self.mainDisplaySize()
+            let sizeBox = streamedSizeBox
+            let applier = makeApplier(capabilities.contains(.control)) {
+                sizeBox.read() ?? Self.mainDisplaySize()
             }
             self.applier = applier
             controlPump = Task { [session, applier] in
@@ -295,6 +309,7 @@ final class MeshMediaCoordinator: ObservableObject {
                     Task { [weak self, capture] in
                         do {
                             try await capture.startMainDisplay()
+                            self?.streamedSizeBox.update(capture.streamedSize)
                             self?.isSharingScreen = true
                         } catch {
                             self?.hostCaptureError = String(describing: error)
@@ -337,6 +352,7 @@ final class MeshMediaCoordinator: ObservableObject {
             Task { await capture.stop() }
         }
         capture = nil
+        streamedSizeBox.update(nil)
         peerSession?.close()
         peerSession = nil
         router = nil
@@ -376,7 +392,7 @@ final class MeshMediaCoordinator: ObservableObject {
         linkStats = MeshLinkStats.read(from: statsEntries)
     }
 
-    private static func mainDisplaySize() -> MeshDisplaySize? {
+    private nonisolated static func mainDisplaySize() -> MeshDisplaySize? {
         let displayID = CGMainDisplayID()
         let width = CGDisplayPixelsWide(displayID)
         let height = CGDisplayPixelsHigh(displayID)
