@@ -44,11 +44,13 @@ Mọi file đều nằm tại trang [Releases](https://github.com/ArtyormSatori/
 - **Viewer:** nhập ID + mật khẩu của máy đang chạy UltraViewer/MacViewer → xem màn hình, điều khiển chuột và bàn phím.
 - **Host:** cho máy khác kết nối vào máy của bạn, sau khi bạn duyệt (quyền xem và quyền điều khiển cấp riêng).
 - **Đường truyền:** TLS qua relay của UltraViewer; hai máy cùng LAN thì kết nối trực tiếp.
+- **Chế độ Tự host (từ bản 5.0):** hai máy cùng chạy MacViewer Ventura kết nối qua máy chủ mesh do bạn tự vận hành — hình ảnh truyền trực tiếp giữa hai máy bằng WebRTC (mã hoá đầu cuối, có huy hiệu Trực tiếp/Qua relay ngay trong phiên), điều khiển từ xa và chat dùng chung một cửa sổ. Cách dựng máy chủ: xem [SELF_HOSTING.md](SELF_HOSTING.md).
 - **Phụ trợ:** chat, clipboard văn bản hai chiều, chụp màn hình + ghi chú, quay video phiên, nghe âm thanh của máy kia, lưu mật khẩu đối tác vào Keychain.
 
 ### Điểm nổi bật
 
 - **Chạy trên macOS 13 Ventura** (deployment target 13.0) — Intel và Apple Silicon; kèm bản dựng Linux.
+- **Giao diện làm mới ở bản 5.0:** biểu tượng app mới, cửa sổ chính mang tên MacViewer Ventura, hỗ trợ đủ giao diện sáng và tối (theo hệ thống hoặc tự chọn trong Cài đặt), chuyển ngôn ngữ Tiếng Việt/English ngay trong Cài đặt.
 - **Chứng thư relay nhúng sẵn:** chứng thư gốc Sectigo R46 được nhúng làm trust anchor bổ sung, nên máy Ventura kết nối relay ngay mà không cần nạp chứng thư thủ công; neo hệ thống và cơ chế ghim tên chứng thư giữ nguyên.
 - **Điều khiển bật mặc định** khi kết nối (máy host vẫn là bên quyết định quyền).
 - **Chất lượng hình:** app yêu cầu máy Windows gửi hình về theo một mức nét, có ba mức sẵn: **Ưu tiên tốc độ (30)** — mượt trên mạng yếu nhưng hình mờ hơn; **Tự động (45)**; **Ưu tiên chất lượng (70)** — hình nét nhất, tốn băng thông hơn. Ngay khi kết nối, app tự chọn mức Ưu tiên chất lượng (70) để hình nét ngay; bạn đổi mức bất cứ lúc nào trong Cài đặt.
@@ -98,7 +100,7 @@ App tự kiểm tra bản mới tại repo này. Khi có bản mới, bấm **C�
 
 ### Giới hạn
 
-- **Không truyền file tới máy chạy UltraViewer:** UltraViewer hiện chưa hỗ trợ truyền file trong giao thức của nó, nên app không gửi được file tới máy đang chạy UltraViewer — điều này không thay đổi được từ phía app. **Bản 5.0 sẽ có truyền file, nhưng chỉ khi cả hai máy cùng chạy MacViewer Ventura**; nếu một bên dùng UltraViewer thì vẫn không truyền file được. Xem [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md).
+- **Không truyền file tới máy chạy UltraViewer:** UltraViewer hiện chưa hỗ trợ truyền file trong giao thức của nó, nên app không gửi được file tới máy đang chạy UltraViewer — điều này không thay đổi được từ phía app. **Truyền file sẽ đến trong một bản cập nhật sau 5.0, và cũng chỉ hoạt động khi cả hai máy cùng chạy MacViewer Ventura**; nếu một bên dùng UltraViewer thì vẫn không truyền file được. Xem [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md).
 - **Màu hình bị giới hạn bởi giao thức:** UltraViewer truyền hình bằng màu RGB555 và ảnh JPEG, nên độ nét không thể bằng các phần mềm dùng luồng video H.264/UDP như RustDesk.
 - **Khi máy Mac làm máy được điều khiển (host):** ảnh màn hình gửi đi không kèm con trỏ chuột, do giới hạn của API chụp hình trên macOS 13.
 - **App được ký dạng ad-hoc:** lần cài thủ công đầu tiên phải mở bằng chuột phải → Open; các bản cập nhật cài qua app thì không cần bước này.
@@ -116,6 +118,7 @@ Gặp lỗi? Mở [issue](https://github.com/ArtyormSatori/MacViewer-Ventura/iss
 | [VENTURA.md](VENTURA.md) | Chi tiết kỹ thuật |
 | [SECURITY_AUDIT.md](SECURITY_AUDIT.md) | Rà soát bảo mật |
 | [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md) | Lộ trình tính năng, giới hạn đã đo |
+| [SELF_HOSTING.md](SELF_HOSTING.md) | Hướng dẫn tự dựng máy chủ cho chế độ Tự host |
 
 ### Build từ mã nguồn
 
@@ -157,11 +160,13 @@ All files are on the [Releases](https://github.com/ArtyormSatori/MacViewer-Ventu
 - **Viewer:** enter the ID + password of a machine running UltraViewer/MacViewer → view its screen, control mouse and keyboard.
 - **Host:** let another machine connect to yours after you approve (view and control permissions granted separately).
 - **Transport:** TLS via UltraViewer's relay; machines on the same LAN connect directly.
+- **Self-hosted mode (from version 5.0):** two machines running MacViewer Ventura connect through a mesh server you operate yourself — the picture travels directly between the two machines over WebRTC (end-to-end encrypted, with a Direct/Relay badge in the session), with remote control and chat in one shared window. To run a server, see [SELF_HOSTING.md](SELF_HOSTING.md).
 - **Extras:** chat, two-way text clipboard, screenshot + annotation, session video recording, remote audio playback, partner passwords stored in Keychain.
 
 ### Highlights
 
 - **Runs on macOS 13 Ventura** (deployment target 13.0) — Intel and Apple Silicon; a Linux build is included.
+- **Refreshed interface in version 5.0:** a new app icon, the main window is titled MacViewer Ventura, full light and dark appearance (following the system or chosen in Settings), and a Tiếng Việt/English language switch in Settings.
 - **Relay certificate bundled:** the Sectigo R46 root is embedded as an additional trust anchor, so Ventura machines connect to the relay with no manual certificate step; system anchors and certificate-name pinning are unchanged.
 - **Control on by default** at connect (the host machine still decides permission).
 - **Image quality:** the app asks the Windows machine to send its picture at a sharpness level, with three ready levels: **Prefer speed (30)** — smooth on weak networks but blurrier; **Automatic (45)**; **Prefer quality (70)** — the sharpest picture, using more bandwidth. The moment a session connects, the app picks Prefer quality (70) so the picture is sharp right away; you can change the level any time in Settings.
@@ -211,7 +216,7 @@ The app checks this repo for new versions. When one is available, click **Update
 
 ### Limits
 
-- **No file transfer to a machine running UltraViewer:** UltraViewer does not currently support file transfer in its protocol, so the app cannot send files to a machine running UltraViewer — and this cannot be changed from the app side. **Version 5.0 will add file transfer, but only when both machines run MacViewer Ventura**; if one side uses UltraViewer, file transfer still will not work. See [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md).
+- **No file transfer to a machine running UltraViewer:** UltraViewer does not currently support file transfer in its protocol, so the app cannot send files to a machine running UltraViewer — and this cannot be changed from the app side. **File transfer will arrive in an update after 5.0, and it too will work only when both machines run MacViewer Ventura**; if one side uses UltraViewer, file transfer still will not work. See [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md).
 - **Image color is limited by the protocol:** UltraViewer sends its picture as RGB555 color and JPEG images, so sharpness cannot match software that streams H.264/UDP video like RustDesk.
 - **When the Mac is the controlled machine (host):** the screen picture sent out does not include the mouse cursor, due to a limitation of the macOS 13 capture API.
 - **The app is ad-hoc signed:** the first manual install must be opened via right-click → Open; updates installed through the app do not need this step.
@@ -229,6 +234,7 @@ Hit a problem? Open an [issue](https://github.com/ArtyormSatori/MacViewer-Ventur
 | [VENTURA.md](VENTURA.md) | Technical details |
 | [SECURITY_AUDIT.md](SECURITY_AUDIT.md) | Security audit |
 | [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md) | Feature roadmap, measured limits |
+| [SELF_HOSTING.md](SELF_HOSTING.md) | How to run your own server for the self-hosted mode |
 
 ### Building from source
 

@@ -17,8 +17,8 @@ Nguyên tắc trung thực kỹ thuật: MacViewer nói chuyện bằng **giao t
 
 ## Giai đoạn B — hai đầu MacViewer
 
-4. **Truyền file — có ở bản 5.0, chỉ khi cả hai máy cùng chạy MacViewer Ventura**
-   Nói rõ: truyền file là tính năng của bản 5.0 và chỉ hoạt động khi cả hai đầu đều chạy MacViewer Ventura (kênh file riêng giữa hai app: chia khối, kiểm tra toàn vẹn, gửi/nhận có thanh tiến độ). Nếu một bên dùng UltraViewer thì vẫn KHÔNG truyền file được — giao thức UltraViewer không có lệnh truyền file (chỉ có chat lệnh 12/29/30 và clipboard), và UltraViewer không công bố lệnh truyền file tương thích nào để app này dùng ké.
+4. **Truyền file — đến trong một bản cập nhật sau 5.0, chỉ khi cả hai máy cùng chạy MacViewer Ventura**
+   Nói rõ: truyền file là tính năng của một bản cập nhật sau 5.0 và chỉ hoạt động khi cả hai đầu đều chạy MacViewer Ventura (kênh file riêng giữa hai app: chia khối, kiểm tra toàn vẹn, gửi/nhận có thanh tiến độ). Nếu một bên dùng UltraViewer thì vẫn KHÔNG truyền file được — giao thức UltraViewer không có lệnh truyền file (chỉ có chat lệnh 12/29/30 và clipboard), và UltraViewer không công bố lệnh truyền file tương thích nào để app này dùng ké.
 
 ## Giai đoạn C — cần máy chủ riêng, phải chốt phương án trước
 
@@ -64,8 +64,8 @@ Technical-honesty principle: MacViewer speaks the **UltraViewer protocol** throu
 
 ## Stage B — both ends MacViewer
 
-4. **File transfer — coming in 5.0, only when both machines run MacViewer Ventura**
-   Stated plainly: file transfer is a 5.0 feature and works only when both ends run MacViewer Ventura (a separate file channel between the two apps: chunked, integrity-checked, send/receive with a progress bar). If one side uses UltraViewer, file transfer still does NOT work — the UltraViewer protocol has no file-transfer command (only chat commands 12/29/30 and clipboard), and UltraViewer publishes no compatible file-transfer command this app could use.
+4. **File transfer — coming in an update after 5.0, only when both machines run MacViewer Ventura**
+   Stated plainly: file transfer is a post-5.0 update feature and works only when both ends run MacViewer Ventura (a separate file channel between the two apps: chunked, integrity-checked, send/receive with a progress bar). If one side uses UltraViewer, file transfer still does NOT work — the UltraViewer protocol has no file-transfer command (only chat commands 12/29/30 and clipboard), and UltraViewer publishes no compatible file-transfer command this app could use.
 
 ## Stage C — needs its own server, decide the approach first
 
