@@ -369,7 +369,7 @@ public final class MeshPeerSession: NSObject, RTCPeerConnectionDelegate, @unchec
         let track = factory.videoTrack(with: source, trackId: Self.screenTrackID)
         let bundle = MeshScreenTrack(track: track, source: source, capturer: capturer)
         lock.withLock { screenTrackStorage = bundle }
-        if let sender = pc.addTrack(track, streamIds: [Self.screenStreamID]) {
+        if let sender = pc.add(track, streamIds: [Self.screenStreamID]) {
             applyH264Preference(to: sender)
         }
         return bundle
