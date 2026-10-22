@@ -7,11 +7,13 @@ import Testing
 struct MeshSessionModelTests {
     private func makeModel(store: InMemoryMeshIdentityStore = InMemoryMeshIdentityStore(),
                            server: FakeMeshServer,
-                           serverTarget: (@Sendable () -> (url: URL, isCustom: Bool))? = nil) -> MeshSessionModel {
+                           serverTarget: (@Sendable () -> (url: URL, isCustom: Bool))? = nil,
+                           resetServerOverride: (@Sendable () -> Void)? = nil) -> MeshSessionModel {
         MeshSessionModel(identityStore: store,
                          makeClient: { _ in server },
                          makeSignaling: { _, _, _ in nil },
-                         serverTarget: serverTarget)
+                         serverTarget: serverTarget,
+                         resetServerOverride: resetServerOverride)
     }
 
     private static let defaultTarget: @Sendable () -> (url: URL, isCustom: Bool) = {
@@ -216,6 +218,134 @@ struct MeshSessionModelTests {
         #expect(model.serverAvailability == .online)
         #expect(server.registerCalls == 1)
         #expect(model.meshID == FakeMeshServer.assignedID)
+    }
+
+    // MARK: Part 3 — first-run branches, invite sheet, in-place switch
+
+    @Test("First run with no network: identity is created locally and the phase is offline")
+    func firstRunNoNetworkKeepsLocalIdentity() async throws {
+        let store = InMemoryMeshIdentityStore()
+        let server = FakeMeshServer()
+        server.registerError = .transport("no route to host")
+        let model = makeModel(store: store, server: server, serverTarget: Self.customTarget)
+        await model.createIdentity(name: "Test Mac", invite: "")
+        #expect(try store.loadIdentity() != nil)
+        #expect(model.meshID == nil)
+        #expect(model.serverAvailability == .unreachable)
+        guard case .offline = model.phase else {
+            Issue.record("expected offline phase, got \(model.phase)")
+            return
+        }
+    }
+
+    @Test("Invite sheet: presenting twice keeps the half-typed code")
+    func inviteSheetPresentIsIdempotent() async {
+        let sheet = MeshInviteSheetModel()
+        sheet.present()
+        sheet.code = "ABCDE"
+        #expect(sheet.code == "ABCD-E")
+        sheet.present()
+        #expect(sheet.isPresented)
+        #expect(sheet.code == "ABCD-E")
+    }
+
+    @Test("Invite sheet: an empty code cannot submit and never reaches the server")
+    func inviteSheetEmptyCodeCannotSubmit() async {
+        let server = FakeMeshServer()
+        let model = makeModel(server: server, serverTarget: Self.customTarget)
+        let sheet = MeshInviteSheetModel()
+        sheet.present()
+        #expect(!sheet.canSubmit)
+        await sheet.submit(mesh: model)
+        #expect(server.registerCalls == 0)
+        #expect(sheet.isPresented)
+    }
+
+    @Test("Invite sheet: a refused code keeps the sheet open with the specific error and the code intact")
+    func inviteSheetWrongCodeStaysOpen() async throws {
+        let store = InMemoryMeshIdentityStore()
+        let server = FakeMeshServer()
+        server.registerError = .inviteRequired
+        let model = makeModel(store: store, server: server, serverTarget: Self.customTarget)
+        await model.createIdentity(name: "Test Mac", invite: "")
+        #expect(model.serverAvailability == .inviteRequired)
+        let sheet = MeshInviteSheetModel()
+        sheet.present()
+        sheet.code = "WRONG123"
+        #expect(sheet.code == "WRON-G123")
+        await sheet.submit(mesh: model)
+        #expect(sheet.isPresented)
+        #expect(sheet.errorMessage == "That invite code was not accepted. Check the code and try again.")
+        #expect(sheet.code == "WRON-G123")
+        #expect(model.meshID == nil)
+        guard case .offline = model.phase else {
+            Issue.record("expected offline phase, got \(model.phase)")
+            return
+        }
+        // Editing the code clears the error for the next attempt.
+        sheet.code = "NEWCODE1"
+        #expect(sheet.errorMessage == nil)
+    }
+
+    @Test("Invite sheet: an accepted code closes the sheet and the model shows the Mesh ID")
+    func inviteSheetSuccessClosesWithMeshID() async {
+        let server = FakeMeshServer()
+        server.registerError = .inviteRequired
+        let model = makeModel(server: server, serverTarget: Self.customTarget)
+        await model.createIdentity(name: "Test Mac", invite: "")
+        #expect(model.meshID == nil)
+        server.registerError = nil
+        let sheet = MeshInviteSheetModel()
+        sheet.present()
+        sheet.code = "GOODCODE"
+        await sheet.submit(mesh: model)
+        #expect(server.lastInvite == "GOODCODE")
+        #expect(!sheet.isPresented)
+        #expect(sheet.code == "")
+        #expect(sheet.errorMessage == nil)
+        #expect(model.phase == .ready)
+        #expect(model.meshID == FakeMeshServer.assignedID)
+    }
+
+    @Test("Invite sheet: cancel clears the code and the error")
+    func inviteSheetCancelClears() async {
+        let sheet = MeshInviteSheetModel()
+        sheet.present()
+        sheet.code = "ABCD"
+        sheet.cancel()
+        #expect(!sheet.isPresented)
+        #expect(sheet.code == "")
+        #expect(sheet.errorMessage == nil)
+    }
+
+    @Test("Use default server switches in place: override reset, re-registered, ready")
+    func switchToDefaultServerInPlace() async throws {
+        let store = InMemoryMeshIdentityStore()
+        let server = FakeMeshServer()
+        let box = TargetBox(target: (URL(string: "http://vega.lan:8734")!, true))
+        let model = makeModel(store: store, server: server,
+                              serverTarget: { box.target },
+                              resetServerOverride: { box.target = (MeshDefaults.serverURL, false) })
+        await model.createIdentity(name: "Test Mac", invite: "")
+        #expect(model.isUsingCustomServer)
+        let callsBefore = server.registerCalls
+        await model.switchToDefaultServer()
+        #expect(!model.isUsingCustomServer)
+        #expect(server.registerCalls == callsBefore + 1)
+        #expect(model.phase == .ready)
+        #expect(model.serverAvailability == .online)
+        #expect(model.meshID == FakeMeshServer.assignedID)
+    }
+
+    @Test("Use default server is a no-op when the default is already in use")
+    func switchToDefaultServerNoOpOnDefault() async {
+        let server = FakeMeshServer()
+        let model = makeModel(server: server, serverTarget: Self.defaultTarget)
+        await model.createIdentity(name: "Test Mac", invite: "")
+        let callsBefore = server.registerCalls
+        await model.switchToDefaultServer()
+        #expect(server.registerCalls == callsBefore)
+        #expect(model.phase == .ready)
     }
 
     @Test("Approve and reject drain the pending list; approve pairs the device")
