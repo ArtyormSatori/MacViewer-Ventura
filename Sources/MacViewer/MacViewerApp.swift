@@ -5,6 +5,9 @@ import SwiftUI
 struct MacViewerApp: App {
     @StateObject private var model = ConnectionModel(adapter: NativeUltraViewerAdapter())
     @StateObject private var hosting = MacHostingModel()
+    /// Owned here (Part 2) so the Settings scene's Self-hosted
+    /// pane can show the same live server state as the main window.
+    @StateObject private var mesh = MeshSessionModel()
     @StateObject private var capture = RemoteCaptureController()
     @StateObject private var updater = UpdateChecker()
     @NSApplicationDelegateAdaptor(MacViewerAppDelegate.self) private var applicationDelegate
@@ -13,9 +16,9 @@ struct MacViewerApp: App {
 
     var body: some Scene {
         WindowGroup("MacViewer Ventura") {
-            ConnectionView(model: model, hosting: hosting, remoteCapture: capture, updater: updater)
+            ConnectionView(model: model, hosting: hosting, remoteCapture: capture, updater: updater, mesh: mesh)
                 .preferredColorScheme((AppAppearance(rawValue: appearance) ?? .system).colorScheme)
-                .frame(minWidth: 960, minHeight: 680)
+                .frame(minWidth: MainWindowLayout.minWidth, minHeight: MainWindowLayout.minHeight)
                 .onAppear {
                     applicationDelegate.capture = capture
                     applicationDelegate.model = model
@@ -25,7 +28,7 @@ struct MacViewerApp: App {
                 }
                 .appLanguage()
         }
-        .defaultSize(width: 1120, height: 800)
+        .defaultSize(width: MainWindowLayout.defaultWidth, height: MainWindowLayout.defaultHeight)
         .commands {
             CommandGroup(replacing: .newItem) {}
             CommandGroup(after: .appInfo) {
@@ -42,7 +45,7 @@ struct MacViewerApp: App {
         }
 
         Settings {
-            MacViewerSettings(model: model, hosting: hosting, updater: updater)
+            MacViewerSettings(model: model, hosting: hosting, updater: updater, mesh: mesh)
                 .appLanguage()
                 .preferredColorScheme((AppAppearance(rawValue: appearance) ?? .system).colorScheme)
         }
@@ -54,6 +57,7 @@ struct MacViewerSettings: View {
     @ObservedObject var model: ConnectionModel
     @ObservedObject var hosting: MacHostingModel
     @ObservedObject var updater: UpdateChecker
+    @ObservedObject var mesh: MeshSessionModel
     @AppStorage(MacHostingModel.unattendedAccessKey) private var unattendedAccess = false
     @AppStorage(MacHostingModel.unattendedControlKey) private var unattendedControl = true
     @AppStorage(MacHostingModel.preventSleepKey) private var preventSleep = true
@@ -68,8 +72,50 @@ struct MacViewerSettings: View {
     @AppStorage(UpdateChecker.automaticKey) private var checkForUpdates = true
     @AppStorage(SessionToolsModel.shareClipboardKey) private var shareClipboard = true
     @AppStorage(AppAppearance.defaultsKey) private var appearance = AppAppearance.system.rawValue
+    /// The sidebar section (redesign §2.6 container): remembered
+    /// like every other navigation state in the app.
+    @State private var section: SettingsSection = SettingsSection.restored()
 
     var body: some View {
+        NavigationSplitView {
+            List(SettingsSection.allCases, selection: sectionSelection) { item in
+                Label {
+                    Text(LocalizedStringKey(item.titleKey))
+                } icon: {
+                    Image(systemName: item.symbol)
+                }
+                .tag(item)
+            }
+            .listStyle(.sidebar)
+            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 240)
+        } detail: {
+            settingsPane
+                .navigationTitle(L(section.titleKey))
+        }
+        .frame(minWidth: 720, idealWidth: 840, minHeight: 520, idealHeight: 600)
+        .onChange(of: section) { $0.save() }
+    }
+
+    /// List selection is optional-typed; the pane never is.
+    private var sectionSelection: Binding<SettingsSection?> {
+        Binding(get: { section }, set: { if let newValue = $0 { section = newValue } })
+    }
+
+    @ViewBuilder
+    private var settingsPane: some View {
+        switch section {
+        case .general: generalPane
+        case .selfHosted: selfHostedPane
+        case .unattendedAccess: unattendedPane
+        case .keyboard: keyboardPane
+        case .clipboard: clipboardPane
+        case .remoteScreen: remoteScreenPane
+        case .history: historyPane
+        case .about: aboutPane
+        }
+    }
+
+    private var generalPane: some View {
         Form {
             Section("Language") {
                 Picker("App language", selection: $language) {
@@ -89,7 +135,30 @@ struct MacViewerSettings: View {
                 Text("System follows your Mac's appearance. Applies to the whole app, in both modes.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            MeshServerSettingsSection()
+        }
+        .formStyle(.grouped)
+    }
+
+    /// The Self-hosted pane: the server pill at its head (§3.2,
+    /// third position — inert here, this pane IS its destination),
+    /// then Part 1's personal-server frame as its Server group,
+    /// logic unchanged.
+    private var selfHostedPane: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                ServerStatusPillView(presentation: ServerStatusPillView.presentation(for: mesh))
+                Spacer()
+            }
+            .padding(Space.standard)
+            Form {
+                MeshServerSettingsSection()
+            }
+            .formStyle(.grouped)
+        }
+    }
+
+    private var historyPane: some View {
+        Form {
             Section("History") {
                 Toggle("Remember successfully connected partner IDs", isOn: $rememberPartners)
                     .onChange(of: rememberPartners) { enabled in
@@ -102,6 +171,12 @@ struct MacViewerSettings: View {
                     .disabled(model.recentPartners.isEmpty)
                 Button("Forget saved passwords", action: model.forgetSavedPasswords)
             }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var unattendedPane: some View {
+        Form {
             Section("Unattended access") {
                 Toggle("Allow unattended access to this Mac", isOn: $unattendedAccess)
                     .onChange(of: unattendedAccess) { enabled in
@@ -126,9 +201,15 @@ struct MacViewerSettings: View {
                     .font(.caption).foregroundStyle(.secondary)
                 if let loginItemError {
                     Text("Start at login could not be changed: \(loginItemError)")
-                        .font(.caption).foregroundStyle(.red)
+                        .font(.caption).foregroundStyle(AppColor.statusError)
                 }
             }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var keyboardPane: some View {
+        Form {
             Section("Keyboard") {
                 Picker("Keyboard input mode", selection: $keyboardMode) {
                     ForEach(KeyboardInputMode.allCases, id: \.rawValue) { mode in
@@ -145,11 +226,23 @@ struct MacViewerSettings: View {
                 Text("Applies to new sessions. US keycode matches the remote layout directly. VNI passthrough sends raw keys so a VNI input method on the remote computer composes the tones — keep this Mac's input source on ABC/US while using it. Unicode text sends characters already composed on this Mac, for remotes without a Vietnamese IME.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var clipboardPane: some View {
+        Form {
             Section("Clipboard") {
                 Toggle("Share clipboard with the other computer", isOn: $shareClipboard)
                 Text("Text copied on either computer can be pasted on the other. Applies to new sessions.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var remoteScreenPane: some View {
+        Form {
             Section("Remote screen") {
                 Toggle("Smooth image scaling", isOn: $smoothScreen)
                 Slider(value: $scrollSensitivity, in: 0.25...2, step: 0.25) {
@@ -157,6 +250,12 @@ struct MacViewerSettings: View {
                 }
                 LabeledContent("Scroll speed", value: String(format: "%.2g×", scrollSensitivity))
             }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var aboutPane: some View {
+        Form {
             Section("About") {
                 LabeledContent("Application", value: "MacViewer \(Self.version)")
                 Toggle("Automatically check for updates", isOn: $checkForUpdates)
@@ -168,7 +267,6 @@ struct MacViewerSettings: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 490, height: 660)
     }
 }
 

@@ -11,7 +11,7 @@ struct MeshConsentView: View {
     @ObservedObject var controller: MeshSessionController
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: Space.standard) {
             if case let .incomingPending(_, peer, peerName, capabilities) = controller.phase {
                 content(peer: peer, name: peerName, capabilities: capabilities)
             } else {
@@ -25,10 +25,10 @@ struct MeshConsentView: View {
 
     private func content(peer: MeshID, name: String?,
                          capabilities: Set<MeshSessionCapability>) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: Space.standard) {
             HStack(spacing: 12) {
                 Image(systemName: "person.crop.circle.badge.questionmark")
-                    .font(.system(size: 30)).foregroundStyle(.orange)
+                    .font(.system(size: 30)).foregroundStyle(AppColor.statusLimited)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Incoming session request").font(.headline)
                     Text(LF("%@ wants to connect to this device.", name ?? peer.formatted))
@@ -82,7 +82,7 @@ struct MeshSessionWindowView: View {
     var media: MeshMediaCoordinator?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: Space.standard) {
             switch controller.phase {
             case let .outgoingPending(_, peer, peerName, _):
                 header(peer: peer, name: peerName)
@@ -165,7 +165,7 @@ struct MeshSessionWindowView: View {
     private func header(peer: MeshID, name: String?) -> some View {
         HStack(spacing: 12) {
             Image(systemName: "laptopcomputer")
-                .font(.system(size: 24)).foregroundStyle(.blue)
+                .font(.system(size: 24)).foregroundStyle(AppColor.accent)
             VStack(alignment: .leading, spacing: 2) {
                 Text(name ?? peer.formatted).font(.headline)
                 Text(peer.formatted)
@@ -200,13 +200,13 @@ private struct MeshMediaSection: View {
                                  inputSender: media.inputSender,
                                  inputEnabled: inputEnabled)
                 .frame(width: 640, height: 360)
-                .overlay(RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(.primary.opacity(0.12)))
+                .overlay(RoundedRectangle(cornerRadius: Radius.card)
+                    .strokeBorder(AppColor.hairline))
             HStack(spacing: 8) {
                 if let kind = media.linkKind {
                     HStack(spacing: 5) {
                         Circle()
-                            .fill(kind == .direct ? Color.green : Color.orange)
+                            .fill(kind == .direct ? AppColor.statusOnline : AppColor.statusLimited)
                             .frame(width: 8, height: 8)
                         Text(L(kind == .direct ? "Direct" : "Relay"))
                             .font(.caption.weight(.medium))
@@ -220,7 +220,7 @@ private struct MeshMediaSection: View {
             }
             if media.mediaFailed {
                 Label("Media connection failed", systemImage: "exclamationmark.circle.fill")
-                    .font(.caption).foregroundStyle(.red)
+                    .font(.caption).foregroundStyle(AppColor.statusError)
             } else if media.remoteVideoTrack == nil {
                 Text("Connecting media…")
                     .font(.caption).foregroundStyle(.secondary)

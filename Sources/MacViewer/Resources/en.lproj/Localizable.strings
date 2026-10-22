@@ -455,3 +455,29 @@
 "Invite required to register" = "Invite required to register";
 "Cannot reach the server" = "Cannot reach the server";
 "Changes apply the next time Mode 2 connects." = "Changes apply the next time Mode 2 connects.";
+
+/* Redesign Part 2: sidebar navigation, server pill, library. */
+"Allow connections" = "Allow connections";
+"Devices & History" = "Devices & History";
+"Your mesh" = "Your mesh";
+"This Mac" = "This Mac";
+"General" = "General";
+"Sharing" = "Sharing";
+"Server settings" = "Server settings";
+"Default server · Online" = "Default server · Online";
+"Custom server · Online" = "Custom server · Online";
+"Default server · Not available yet" = "Default server · Not available yet";
+"Connecting to server…" = "Connecting to server…";
+"Paired devices — Self-hosted" = "Paired devices — Self-hosted";
+"Recent Windows computers — UltraViewer" = "Recent Windows computers — UltraViewer";
+"Your server" = "Your server";
+"Set up personal server" = "Set up personal server";
+"Open Self-hosted settings" = "Open Self-hosted settings";
+"No recent computers yet." = "No recent computers yet.";
+"MESH" = "MESH";
+"Status" = "Status";
+"UltraViewer" = "UltraViewer";
+"Unattended access" = "Unattended access";
+"Keyboard" = "Keyboard";
+"Paired devices ask for your approval before each session. Devices that are not paired cannot start a session." = "Paired devices ask for your approval before each session. Devices that are not paired cannot start a session.";
+"Screen Recording and Accessibility are needed to share this Mac's screen and control." = "Screen Recording and Accessibility are needed to share this Mac's screen and control.";

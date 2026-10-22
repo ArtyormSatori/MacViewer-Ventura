@@ -138,14 +138,17 @@ final class MeshServerSettingsModel: ObservableObject {
     }
 }
 
-/// The personal-server frame itself (spec §3.4), living inside the
-/// existing Settings → Self-hosted section until the Part 2 sidebar
-/// Settings reorganization moves it.
+/// The personal-server frame itself (spec §3.4): since Part 2 it
+/// is the Server group of the Settings sidebar's Self-hosted pane.
+/// Button audit (§1.8): the mode picker's "Default server" choice
+/// IS the reset — choosing it while a custom server is in effect
+/// applies `useDefaultServer()` — so the frame carries no second,
+/// duplicate "Use default server" button.
 struct MeshServerSettingsSection: View {
     @StateObject private var frame = MeshServerSettingsModel()
 
     var body: some View {
-        Section("Self-hosted") {
+        Section("Server") {
             LabeledContent("Server in use") {
                 Text(currentText).foregroundStyle(.secondary)
             }
@@ -154,6 +157,15 @@ struct MeshServerSettingsSection: View {
             Picker("Server", selection: $frame.selection) {
                 Text("Default server").tag(MeshServerSettingsModel.Selection.default)
                 Text("Custom server").tag(MeshServerSettingsModel.Selection.custom)
+            }
+            .onChange(of: frame.selection) { newSelection in
+                // The choice applies the reset itself (§1.8: an
+                // action that exists as a mode choice is never
+                // repeated as a separate button). Choosing Custom
+                // only reveals the draft fields; it saves nothing.
+                if newSelection == .default, frame.current.isCustom {
+                    frame.useDefaultServer()
+                }
             }
             if frame.selection == .custom {
                 TextField("Server address", text: $frame.customAddress,
@@ -179,12 +191,11 @@ struct MeshServerSettingsSection: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Button("Save and switch to this server") { frame.saveAndSwitch() }
+                    .buttonStyle(.borderedProminent)
                     .disabled(!frame.canSave)
                 Text("Save is enabled after a successful connection test.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Button("Use default server") { frame.useDefaultServer() }
-                .disabled(!frame.current.isCustom)
             Text("Switching servers changes which pairings you see. Pairings on the other server are kept and come back when you switch back.")
                 .font(.caption).foregroundStyle(.secondary)
             if let note = frame.note {

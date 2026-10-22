@@ -58,6 +58,18 @@ final class MeshSessionModel: ObservableObject {
         var name: String?
         var online: Bool?
         var lastSeen: Int64?
+
+        /// Presence in words, shared by the Self-hosted list and
+        /// the Devices & History library so a device reads the same
+        /// everywhere: Online, Last seen <date>, or Offline.
+        var presenceText: String {
+            if online == true { return L("Online") }
+            if let lastSeen, lastSeen > 0 {
+                let date = Date(timeIntervalSince1970: TimeInterval(lastSeen))
+                return LF("Last seen %@", date.formatted(date: .abbreviated, time: .shortened))
+            }
+            return L("Offline")
+        }
     }
 
     @Published private(set) var phase: Phase = .working

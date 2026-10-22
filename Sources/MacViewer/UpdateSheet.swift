@@ -84,10 +84,10 @@ struct UpdateSheet: View {
         default:
             if let error = updater.installError {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption).foregroundStyle(.red)
+                    .font(.caption).foregroundStyle(AppColor.statusError)
             } else if endsConnections {
                 Label("Updating restarts MacViewer and ends current connections.", systemImage: "exclamationmark.circle")
-                    .font(.caption).foregroundStyle(.orange)
+                    .font(.caption).foregroundStyle(AppColor.statusLimited)
             }
         }
     }

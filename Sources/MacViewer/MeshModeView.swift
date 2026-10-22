@@ -32,8 +32,9 @@ struct MeshModeView: View {
                     pairedBlock
                 }
             }
-            .frame(maxWidth: 900)
-            .padding(.horizontal, 24).padding(.vertical, 20)
+            .frame(maxWidth: MainWindowLayout.contentMaxWidth)
+            .padding(.horizontal, MainWindowLayout.contentHorizontalPadding)
+            .padding(.vertical, MainWindowLayout.contentVerticalPadding)
             .frame(maxWidth: .infinity, alignment: .top)
         }
         .clipped()
@@ -84,7 +85,7 @@ struct MeshModeView: View {
             }
             if let error = mesh.errorMessage {
                 Label(error, systemImage: "exclamationmark.circle.fill")
-                    .font(.callout).foregroundStyle(.red)
+                    .font(.callout).foregroundStyle(AppColor.statusError)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Button {
@@ -98,8 +99,8 @@ struct MeshModeView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(cardBackground, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.primary.opacity(0.09)))
+        .background(cardBackground, in: RoundedRectangle(cornerRadius: Radius.card))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(AppColor.hairline))
     }
 
     // MARK: This device (§5.2)
@@ -107,12 +108,12 @@ struct MeshModeView: View {
     private var thisDeviceCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                Image(systemName: "laptopcomputer").font(.system(size: 20)).foregroundStyle(.blue)
+                Image(systemName: "laptopcomputer").font(.system(size: 20)).foregroundStyle(AppColor.accent)
                     .frame(width: 36, height: 36)
-                    .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+                    .background(AppColor.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: Radius.card))
                 VStack(alignment: .leading, spacing: 4) {
                     Text("THIS DEVICE").font(.system(size: 10, weight: .semibold)).tracking(1)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(AppColor.accent)
                     TextField("Device name", text: $nameDraft)
                         .textFieldStyle(.plain).font(.headline)
                         .onSubmit { Task { await mesh.saveDeviceNameAndRefresh() } }
@@ -121,13 +122,19 @@ struct MeshModeView: View {
                 if mesh.isBusy { ProgressView().controlSize(.small) }
             }
             if let meshID = mesh.meshID {
-                HStack(spacing: 8) {
-                    Text("Mesh ID").font(.callout.weight(.medium))
-                    Text(meshID.formatted)
-                        .font(.system(size: 17, weight: .semibold, design: .monospaced))
-                        .textSelection(.enabled)
-                    Button { copy(meshID.rawValue) } label: { Image(systemName: "doc.on.doc") }
-                        .buttonStyle(.borderless).help("Copy")
+                VStack(alignment: .leading, spacing: Space.tight) {
+                    Text("Mesh ID").font(AppFont.caption.weight(.medium)).foregroundStyle(.secondary)
+                    HStack(spacing: Space.small) {
+                        Text(meshID.formatted)
+                            .font(AppFont.meshIDHero)
+                            .textSelection(.enabled)
+                        Button { copy(meshID.rawValue) } label: {
+                            Label("Copy", systemImage: "doc.on.doc")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Copy")
+                        .accessibilityLabel("Copy")
+                    }
                 }
             }
             statusLine
@@ -160,7 +167,7 @@ struct MeshModeView: View {
             }
             if case let .offline(message) = mesh.phase {
                 Label(message, systemImage: "exclamationmark.circle.fill")
-                    .font(.callout).foregroundStyle(.red)
+                    .font(.callout).foregroundStyle(AppColor.statusError)
                     .fixedSize(horizontal: false, vertical: true)
                 Button("Try again") { Task { await mesh.refresh() } }
                     .buttonStyle(.bordered).controlSize(.small)
@@ -169,44 +176,27 @@ struct MeshModeView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(cardBackground, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.primary.opacity(0.09)))
+        .background(cardBackground, in: RoundedRectangle(cornerRadius: Radius.card))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(AppColor.hairline))
     }
 
+    /// Presence (dot + word) and the server pill (§3.2, D4): the
+    /// pill replaces Part 1's plain status text — same observed
+    /// states, presented as the one capsule used everywhere.
     private var statusLine: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Space.small) {
             if mesh.phase == .working {
                 ProgressView().controlSize(.small)
                 Text("Connecting…").font(.callout).foregroundStyle(.secondary)
             } else {
-                Circle().fill(mesh.isOnline ? Color.green : Color.secondary)
+                Circle().fill(mesh.isOnline ? AppColor.statusOnline : AppColor.statusIdle)
                     .frame(width: 8, height: 8)
                 Text(LocalizedStringKey(mesh.isOnline ? "Online" : "Offline"))
                     .font(.callout.weight(.medium))
             }
-            Text("·").foregroundStyle(.secondary)
-            Text(LocalizedStringKey(mesh.isUsingCustomServer ? "Custom server" : "Default server"))
-                .font(.callout).foregroundStyle(.secondary)
-            if let host = mesh.serverURL.host {
-                Text(host).font(.callout).foregroundStyle(.secondary)
+            ServerStatusPillView(presentation: ServerStatusPillView.presentation(for: mesh)) {
+                openServerSettings()
             }
-            if let availabilityText {
-                Text("·").foregroundStyle(.secondary)
-                Text(LocalizedStringKey(availabilityText))
-                    .font(.callout).foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    /// The observed server availability, in words (spec §3.2). Nil
-    /// when there is nothing extra to say: online is already carried
-    /// by the presence dot, and unknown/checking by the spinner.
-    private var availabilityText: String? {
-        switch mesh.serverAvailability {
-        case .defaultNotAvailable: return "Not available yet"
-        case .inviteRequired: return "Invite required to register"
-        case .unreachable: return "Cannot reach the server"
-        case .unknown, .checking, .online: return nil
         }
     }
 
@@ -240,7 +230,7 @@ struct MeshModeView: View {
             }
             if let error = mesh.errorMessage, mesh.phase == .ready {
                 Label(error, systemImage: "exclamationmark.circle.fill")
-                    .font(.callout).foregroundStyle(.red)
+                    .font(.callout).foregroundStyle(AppColor.statusError)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -258,7 +248,7 @@ struct MeshModeView: View {
             ForEach(mesh.pendingRequests, id: \.rawValue) { peer in
                 HStack(spacing: 12) {
                     Image(systemName: "person.crop.circle.badge.questionmark")
-                        .font(.system(size: 19)).foregroundStyle(.orange)
+                        .font(.system(size: 19)).foregroundStyle(AppColor.statusLimited)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(peer.formatted)
                             .font(.system(size: 15, weight: .medium, design: .monospaced))
@@ -268,15 +258,15 @@ struct MeshModeView: View {
                     Button("Reject", role: .destructive) { Task { await mesh.reject(peer) } }
                         .buttonStyle(.bordered).controlSize(.small)
                     Button("Approve") { Task { await mesh.approve(peer) } }
-                        .buttonStyle(.borderedProminent).controlSize(.small)
+                        .buttonStyle(.bordered).controlSize(.small)
                 }
                 if peer != mesh.pendingRequests.last { Divider() }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(cardBackground, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.primary.opacity(0.09)))
+        .background(cardBackground, in: RoundedRectangle(cornerRadius: Radius.card))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(AppColor.hairline))
     }
 
     // MARK: Paired (§5.2)
@@ -291,13 +281,13 @@ struct MeshModeView: View {
                 VStack(spacing: 0) {
                     ForEach(mesh.pairedDevices) { device in
                         HStack(spacing: 13) {
-                            Circle().fill(device.online == true ? Color.green : Color.secondary)
+                            Circle().fill(device.online == true ? AppColor.statusOnline : AppColor.statusIdle)
                                 .frame(width: 8, height: 8)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(device.name ?? device.id.formatted)
                                     .font(.system(size: 15, weight: .medium,
                                                   design: device.name == nil ? .monospaced : .default))
-                                Text(presenceText(for: device))
+                                Text(device.presenceText)
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -337,21 +327,12 @@ struct MeshModeView: View {
                         if device.id != mesh.pairedDevices.last?.id { Divider().padding(.leading, 37) }
                     }
                 }
-                .background(cardBackground, in: RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.primary.opacity(0.09)))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .background(cardBackground, in: RoundedRectangle(cornerRadius: Radius.card))
+                .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(AppColor.hairline))
+                .clipShape(RoundedRectangle(cornerRadius: Radius.card))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func presenceText(for device: MeshSessionModel.PairedDevice) -> String {
-        if device.online == true { return L("Online") }
-        if let lastSeen = device.lastSeen, lastSeen > 0 {
-            let date = Date(timeIntervalSince1970: TimeInterval(lastSeen))
-            return LF("Last seen %@", date.formatted(date: .abbreviated, time: .shortened))
-        }
-        return L("Offline")
     }
 
     private var cardBackground: Color { Color(nsColor: .controlBackgroundColor) }
@@ -389,7 +370,7 @@ private struct MeshSessionBanner: View {
             VStack(alignment: .leading, spacing: 6) {
                 strip {
                     Image(systemName: "dot.radiowaves.left.and.right")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(AppColor.statusOnline)
                     Text(role == .host
                          ? LF("%@ is connected to this device.", peerName ?? peer.formatted)
                          : LF("Connected to %@.", peerName ?? peer.formatted))
@@ -421,8 +402,8 @@ private struct MeshSessionBanner: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16).padding(.vertical, 11)
             .background(Color(nsColor: .controlBackgroundColor),
-                        in: RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.primary.opacity(0.09)))
+                        in: RoundedRectangle(cornerRadius: Radius.card))
+            .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(AppColor.hairline))
     }
 }
 
@@ -436,11 +417,11 @@ private struct MeshHostMediaLine: View {
         if let error = media.hostCaptureError {
             Label(LF("Screen sharing failed: %@", error),
                   systemImage: "exclamationmark.circle.fill")
-                .font(.caption).foregroundStyle(.red)
+                .font(.caption).foregroundStyle(AppColor.statusError)
                 .fixedSize(horizontal: false, vertical: true)
         } else if media.isSharingScreen {
             HStack(spacing: 5) {
-                Circle().fill(Color.green).frame(width: 7, height: 7)
+                Circle().fill(AppColor.statusOnline).frame(width: 7, height: 7)
                 Text("Sharing screen")
                     .font(.caption).foregroundStyle(.secondary)
             }

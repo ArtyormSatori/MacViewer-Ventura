@@ -39,13 +39,13 @@ struct ChatConversationView<Transport: ChatTransport>: View {
 
     private var header: some View {
         HStack(spacing: 9) {
-            Circle().fill(transport.peerIsOnline ? Color.green : Color.secondary)
+            Circle().fill(transport.peerIsOnline ? AppColor.statusOnline : AppColor.statusIdle)
                 .frame(width: 9, height: 9)
             VStack(alignment: .leading, spacing: 1) {
                 Text(transport.conversationTitle)
-                    .font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                    .font(AppFont.blockTitle).lineLimit(1)
                 Text(transport.conversationSubtitle)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(AppFont.monoCaption)
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
@@ -98,11 +98,11 @@ struct ChatConversationView<Transport: ChatTransport>: View {
                     .font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
             }
             Text(message.text)
-                .font(.system(size: 13))
+                .font(AppFont.body)
                 .textSelection(.enabled)
                 .padding(.horizontal, 10).padding(.vertical, 7)
-                .background(message.isOutgoing ? Color.accentColor : Color(nsColor: .controlColor),
-                            in: RoundedRectangle(cornerRadius: 10))
+                .background(message.isOutgoing ? AppColor.accent : Color(nsColor: .controlColor),
+                            in: RoundedRectangle(cornerRadius: Radius.card))
                 .foregroundStyle(message.isOutgoing ? Color.white : Color.primary)
             HStack(spacing: 5) {
                 Text(message.timestamp.formatted(date: .omitted, time: .shortened))
@@ -120,7 +120,7 @@ struct ChatConversationView<Transport: ChatTransport>: View {
         switch delivery {
         case .sending: Text("Sending…")
         case .sent: Text("Sent")
-        case .failed: Text("Not delivered").foregroundStyle(.red)
+        case .failed: Text("Not delivered").foregroundStyle(AppColor.statusError)
         case .received: EmptyView()
         }
     }
@@ -139,7 +139,7 @@ struct ChatConversationView<Transport: ChatTransport>: View {
             }
             if draftTooLong {
                 Text("Keep chat messages under 16,384 characters.")
-                    .font(.caption).foregroundStyle(.red)
+                    .font(.caption).foregroundStyle(AppColor.statusError)
             }
         }
         .padding(10)

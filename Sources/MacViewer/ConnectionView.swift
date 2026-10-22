@@ -1,4 +1,5 @@
 import AppKit
+import MeshClient
 import SwiftUI
 import UltraViewerProtocol
 
@@ -9,15 +10,23 @@ struct ConnectionView: View {
     @AppStorage("MacViewer.scrollSensitivity") private var scrollSensitivity = 1.0
     @ObservedObject var remoteCapture: RemoteCaptureController
     @ObservedObject var updater: UpdateChecker
-    @StateObject private var mesh = MeshSessionModel()
+    /// Owned by the app (Part 2): the Settings scene shows the same
+    /// model's server state in its Self-hosted pane.
+    @ObservedObject var mesh: MeshSessionModel
     @State private var meshSessionWindows = MeshSessionWindows()
     @State private var meshChatWindows = MeshChatWindows()
     @State private var uvChatWindows = UltraViewerChatWindows()
-    @AppStorage(AppMode.defaultsKey) private var appMode = AppMode.ultraViewer
+    /// The sidebar destination (redesign §1.1, D1), restored from
+    /// the remembered section — or, before that key existed, from
+    /// the 5.0 mode memory (see MainSection.restored).
+    @State private var section: MainSection = MainSection.restored()
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var windowWidth: CGFloat = MainWindowLayout.defaultWidth
     @AppStorage(MeshDefaults.serverAddressKey) private var meshServerAddress = ""
     @State private var remoteDisplayScale: RemoteDisplayScale = .fit
     @AppStorage("MacViewer.imageQuality") private var remoteImageQuality: RemoteImageQuality = .quality
     @State private var showSession = false
+    @State private var expandedLibraryDevice: MeshID?
     @State private var showSessionToolbar = true
     @State private var remoteWallpaperVisible = true
     @State private var revealPassword = false
@@ -29,21 +38,14 @@ struct ConnectionView: View {
 
     var body: some View {
         let _ = appLocale
-        VStack(spacing: 0) {
+        Group {
+            // While a Mode 1 session is on screen the remote screen
+            // takes the whole window and the sidebar is gone — the
+            // mode stays locked for the session's lifetime (§1.1).
             if showSession && model.isSessionActive { remoteSession }
-            else {
-                appHeader
-                Divider()
-                modeSwitchBar
-                Divider()
-                if appMode == .selfHosted {
-                    MeshModeView(mesh: mesh, onOpenChat: { device in
-                        meshChatWindows.show(peer: device.id, name: device.name)
-                    })
-                } else { dashboard }
-            }
+            else { mainFrame }
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(AppColor.surfaceWindow)
         .sheet(isPresented: Binding(get: { hosting.pendingRequest != nil }, set: { if !$0 { hosting.decline() } })) {
             IncomingMacConnectionView(hosting: hosting)
         }
@@ -58,6 +60,19 @@ struct ConnectionView: View {
                 model.disconnect()
                 model.partnerID = id; model.password = password
                 model.connect(); showSession = true
+            }
+            // The two shared destinations read mesh state (the
+            // host card, the paired group): arriving there starts
+            // the mesh model exactly as opening Mode 2 always has.
+            // start() is idempotent and safe on every appearance.
+            if section == .allowConnections || section == .devicesHistory {
+                Task { await mesh.start() }
+            }
+        }
+        .onChange(of: section) { newSection in
+            newSection.save()
+            if newSection == .allowConnections || newSection == .devicesHistory {
+                Task { await mesh.start() }
             }
         }
         .confirmationDialog("Switch control sides?", isPresented: $confirmSideSwitch, titleVisibility: .visible) {
@@ -133,97 +148,394 @@ struct ConnectionView: View {
         if case .failed = updater.state { "Update failed" } else { "MacViewer is up to date" }
     }
 
-    private var appHeader: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "display.2")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 28, height: 28)
-                .background(.blue.gradient, in: RoundedRectangle(cornerRadius: 8))
-            VStack(alignment: .leading, spacing: 2) {
-                Text("MacViewer Ventura").font(.system(size: 14, weight: .semibold))
-                Text("Works with UltraViewer on Windows").font(.system(size: 10)).foregroundStyle(.secondary)
+    // MARK: Main frame (redesign §1.1/§2.1, decisions D1/D3/D6)
+
+    /// The sidebar frame that replaces the custom-drawn header and
+    /// the segmented control: a unified system title bar carrying
+    /// the section name, with the update action and the Settings
+    /// entry in its toolbar (§2.1). The window title itself stays
+    /// "MacViewer Ventura" (§9.6).
+    private var mainFrame: some View {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            sidebar
+        } detail: {
+            sectionDetail
+        }
+        .background {
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { windowWidth = proxy.size.width }
+                    .onChange(of: proxy.size.width) { windowWidth = $0 }
             }
-            Spacer()
-            if hosting.phase == .sharing {
-                Menu {
-                    Text("Viewing: \(hosting.viewer?.displayName ?? "Windows computer")")
-                    Toggle("Allow control of this Mac", isOn: incomingControlBinding)
-                        .disabled(incomingControlDisabled)
-                    if !hosting.permissions.accessibility {
-                        Button("Enable Accessibility…", action: hosting.requestAccessibility)
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                if let release = updater.availableRelease { updateButton(release) }
+                settingsButton
+                    .buttonStyle(.plain)
+                    .help("Settings")
+                    .accessibilityLabel("Settings")
+            }
+        }
+    }
+
+    private var sidebarStyle: MainWindowLayout.SidebarStyle {
+        MainWindowLayout.sidebarStyle(windowWidth: windowWidth)
+    }
+
+    private var sidebar: some View {
+        VStack(spacing: 0) {
+            List(selection: sectionSelection) {
+                Section {
+                    sidebarRow(.control)
+                    sidebarRow(.selfHosted)
+                } header: {
+                    Text(LocalizedStringKey(MainSection.Group.connect.titleKey))
+                }
+                Section {
+                    sidebarRow(.allowConnections)
+                    sidebarRow(.devicesHistory)
+                } header: {
+                    Text(LocalizedStringKey(MainSection.Group.thisMac.titleKey))
+                }
+            }
+            .listStyle(.sidebar)
+            Divider()
+            sidebarFooter
+        }
+        .navigationSplitViewColumnWidth(
+            min: sidebarStyle == .full ? 180 : MainWindowLayout.sidebarIconOnlyWidth,
+            ideal: MainWindowLayout.sidebarWidth(windowWidth: windowWidth),
+            max: sidebarStyle == .full ? 280 : MainWindowLayout.sidebarIconOnlyWidth)
+    }
+
+    /// List selection is optional-typed; the app's section never is.
+    private var sectionSelection: Binding<MainSection?> {
+        Binding(get: { section }, set: { if let newValue = $0 { section = newValue } })
+    }
+
+    private func sidebarRow(_ item: MainSection) -> some View {
+        HStack(spacing: Space.small) {
+            Image(systemName: item.symbol)
+                .frame(width: 18, alignment: .center)
+            if sidebarStyle == .full {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(LocalizedStringKey(item.titleKey)).font(AppFont.sidebarTitle)
+                    if let subtitle = item.subtitleKey {
+                        Text(LocalizedStringKey(subtitle))
+                            .font(AppFont.sidebarSubtitle).foregroundStyle(.secondary)
                     }
-                    Divider()
-                    Button("End incoming session", role: .destructive, action: hosting.endViewer)
-                        .disabled(hosting.isEndingViewer)
-                    Button("Pause incoming access", action: hosting.stop)
-                } label: {
-                    Label(LocalizedStringKey(hosting.isEndingViewer ? "Ending incoming session…" : "Mac screen shared"),
-                          systemImage: "dot.radiowaves.left.and.right")
-                        .font(.callout).foregroundStyle(.orange)
                 }
-                .menuStyle(.borderlessButton).fixedSize()
-                .help("Manage Windows access to this Mac")
-                SessionToolsButton(tools: hosting.tools, peerName: incomingPeerName,
-                                   title: "Incoming chat", context: "Incoming", onOpen: model.releaseRemoteInput)
-                    .controlSize(.small)
+            }
+            Spacer(minLength: 0)
+            if item == .selfHosted {
+                // A small server dot (§2.1): the mesh's readiness is
+                // visible without opening the section. The full
+                // pill, with its words, lives in the footer.
+                Circle().fill(serverPillDotColor).frame(width: 8, height: 8)
+            }
+            if item == .allowConnections, hosting.phase == .sharing {
+                // D6: the sharing state moved off the deleted
+                // header onto this row — a dot WITH its word (§1.1).
+                HStack(spacing: Space.tight) {
+                    Circle().fill(AppColor.statusLimited).frame(width: 8, height: 8)
+                    if sidebarStyle == .full {
+                        Text("Sharing").font(AppFont.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .tag(item)
+        .help(L(item.titleKey))
+        .accessibilityLabel(L(item.titleKey))
+    }
+
+    /// The footer's server pill (§3.2, D4): always visible, and a
+    /// door into Settings → Self-hosted. In the icon-only sidebar
+    /// it reduces to its dot, with the pill's words as its tooltip.
+    private var sidebarFooter: some View {
+        Group {
+            if sidebarStyle == .full {
+                ServerStatusPillView(presentation: serverPill) { openSettings() }
+                    .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                Label(LocalizedStringKey(hosting.isRunning ? "Incoming access on" : "Incoming access paused"), systemImage: "shield.lefthalf.filled")
-                    .font(.callout).foregroundStyle(.secondary)
-            }
-            if let release = updater.availableRelease { updateButton(release) }
-            settingsButton
-                .buttonStyle(.plain).help("Settings")
-                .padding(.leading, 12)
-        }
-        .padding(.horizontal, 16).padding(.vertical, 8)
-        .fixedSize(horizontal: false, vertical: true)
-        .background(Color(nsColor: .windowBackgroundColor))
-    }
-
-    /// The 5.0 mode switch (UI spec §4): a segmented control directly
-    /// under the title bar, spanning the content width. While a Mode 1
-    /// session is on screen the switch is not shown at all — the remote
-    /// session replaces this whole area, which locks the mode for the
-    /// session's lifetime.
-    private var modeSwitchBar: some View {
-        Picker("Mode", selection: $appMode) {
-            ForEach(AppMode.allCases) { mode in
-                Label {
-                    Text(LocalizedStringKey(mode.title))
-                } icon: {
-                    Image(systemName: mode.symbol)
+                Button { openSettings() } label: {
+                    Circle().fill(serverPillDotColor).frame(width: 10, height: 10)
                 }
-                .tag(mode)
+                .buttonStyle(.plain)
+                .help(L(serverPill.textKey))
+                .accessibilityLabel(L(serverPill.textKey))
             }
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .padding(.horizontal, 16).padding(.vertical, 8)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .padding(Space.medium)
     }
 
-    private var dashboard: some View {
+    private var serverPill: ServerPillPresentation {
+        ServerStatusPillView.presentation(for: mesh)
+    }
+
+    private var serverPillDotColor: Color {
+        switch serverPill.token {
+        case .online: return AppColor.statusOnline
+        case .limited: return AppColor.statusLimited
+        case .idle: return AppColor.statusIdle
+        }
+    }
+
+    /// Opens the app's Settings scene (the macOS 13 path MeshModeView
+    /// already uses for its server-settings door).
+    private func openSettings() {
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+    }
+
+    @ViewBuilder
+    private var sectionDetail: some View {
+        switch section {
+        case .control:
+            controlDetail
+                .navigationTitle(L(MainSection.control.titleKey))
+        case .selfHosted:
+            MeshModeView(mesh: mesh, onOpenChat: { device in
+                meshChatWindows.show(peer: device.id, name: device.name)
+            })
+            .navigationTitle(L(MainSection.selfHosted.titleKey))
+        case .allowConnections:
+            allowConnectionsDetail
+                .navigationTitle(L(MainSection.allowConnections.titleKey))
+        case .devicesHistory:
+            devicesHistoryDetail
+                .navigationTitle(L(MainSection.devicesHistory.titleKey))
+        }
+    }
+
+    /// The Control section (§2.2): the Mode 1 connect card exactly
+    /// as users know it — same fields, same order, same defaults —
+    /// under the 20-point screen title, with Mode 1's recents below.
+    private var controlDetail: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Connect and share").font(.system(size: 21, weight: .semibold))
-                    Text("Control a Windows computer, or approve access to this Mac.")
-                        .font(.body).foregroundStyle(.secondary)
-                }
-                HStack(alignment: .top, spacing: 20) {
-                    partnerCard
-                    hostingCard
-                }
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: Space.standard) {
+                Text("Control").font(AppFont.screenTitle)
+                partnerCard
+                    .fixedSize(horizontal: false, vertical: true)
                 if !model.recentPartners.isEmpty { recentPartners }
             }
-            .frame(maxWidth: 900)
-            .padding(.horizontal, 24).padding(.vertical, 20)
+            .frame(maxWidth: MainWindowLayout.contentMaxWidth)
+            .padding(.horizontal, MainWindowLayout.contentHorizontalPadding)
+            .padding(.vertical, MainWindowLayout.contentVerticalPadding)
             .frame(maxWidth: .infinity, alignment: .top)
         }
         .venturaScrollFixes()
         .clipped()
+    }
+
+    /// The Allow connections section (§2.3): the two host surfaces
+    /// as two clearly mode-labelled cards, then the server block —
+    /// the only place on the main window that touches server
+    /// configuration, and it only ever leads into the guided frame.
+    private var allowConnectionsDetail: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Space.standard) {
+                hostingCard
+                    .fixedSize(horizontal: false, vertical: true)
+                meshHostCard
+                serverBlock
+            }
+            .frame(maxWidth: MainWindowLayout.contentMaxWidth)
+            .padding(.horizontal, MainWindowLayout.contentHorizontalPadding)
+            .padding(.vertical, MainWindowLayout.contentVerticalPadding)
+            .frame(maxWidth: .infinity, alignment: .top)
+        }
+        .venturaScrollFixes()
+        .clipped()
+    }
+
+    /// The mesh half of Allow connections (§2.3): the host policy
+    /// in summary and, while a mesh host session runs, the live
+    /// session with its End action — the role the old banner's host
+    /// half played. The mesh has no UltraViewer-style session
+    /// password; pairing plus per-session approval is its policy.
+    private var meshHostCard: some View {
+        VStack(alignment: .leading, spacing: Space.medium) {
+            cardHeading("Self-hosted", direction: "MESH", symbol: "network", color: AppColor.accent)
+            Divider()
+            if let controller = mesh.sessionController,
+               case let .active(_, peer, peerName, .host, _, _) = controller.phase {
+                HStack(spacing: Space.small) {
+                    Label(LF("%@ is connected to this device.", peerName ?? peer.formatted),
+                          systemImage: "dot.radiowaves.left.and.right")
+                        .font(AppFont.body.weight(.medium))
+                        .foregroundStyle(AppColor.statusOnline)
+                    Spacer()
+                    Button("End session", role: .destructive) { controller.endSession() }
+                        .buttonStyle(.bordered).controlSize(AppButtonStyle.rowControlSize)
+                }
+            } else {
+                Text("Paired devices ask for your approval before each session. Devices that are not paired cannot start a session.")
+                    .font(AppFont.body).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !hosting.canControl {
+                HStack(spacing: Space.small) {
+                    Text("Screen Recording and Accessibility are needed to share this Mac's screen and control.")
+                        .font(AppFont.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Button("Open setup…") {
+                        MacPermissionsSetupWindowController.shared.show(hosting: hosting,
+                            initialPermission: hosting.permissions.screenRecording ? .accessibility : .screenRecording)
+                    }
+                    .buttonStyle(.bordered).controlSize(AppButtonStyle.rowControlSize)
+                }
+            }
+            HStack {
+                Spacer()
+                Button("Open Self-hosted settings") { openSettings() }
+                    .buttonStyle(.bordered).controlSize(AppButtonStyle.rowControlSize)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(MainWindowLayout.cardPadding)
+        .background(cardBackground, in: RoundedRectangle(cornerRadius: Radius.card))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(AppColor.hairline))
+    }
+
+    /// The server block under the host cards (§2.3): the pill and
+    /// the single door into the personal-server frame (§3.4).
+    private var serverBlock: some View {
+        VStack(alignment: .leading, spacing: Space.small) {
+            Text("Your server").font(AppFont.blockTitle)
+            HStack(spacing: Space.small) {
+                ServerStatusPillView(presentation: serverPill) { openSettings() }
+                Spacer()
+                Button("Set up personal server") { openSettings() }
+                    .buttonStyle(.bordered).controlSize(AppButtonStyle.rowControlSize)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(MainWindowLayout.cardPadding)
+        .background(cardBackground, in: RoundedRectangle(cornerRadius: Radius.card))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(AppColor.hairline))
+    }
+
+    /// The Devices & History library (§2.5, D5): ONE screen, TWO
+    /// groups — each titled with its mode, each fed by its own
+    /// store, never merged. A row's actions always run in the mode
+    /// that owns the row.
+    private var devicesHistoryDetail: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Space.large) {
+                libraryMeshGroup
+                libraryRecentGroup
+            }
+            .frame(maxWidth: MainWindowLayout.contentMaxWidth)
+            .padding(.horizontal, MainWindowLayout.contentHorizontalPadding)
+            .padding(.vertical, MainWindowLayout.contentVerticalPadding)
+            .frame(maxWidth: .infinity, alignment: .top)
+        }
+        .venturaScrollFixes()
+        .clipped()
+    }
+
+    private var libraryMeshGroup: some View {
+        VStack(alignment: .leading, spacing: Space.medium) {
+            Text(LocalizedStringKey(DeviceLibraryGroup.meshPaired.titleKey))
+                .font(AppFont.blockTitle)
+            if mesh.pairedDevices.isEmpty {
+                Text("No paired devices yet.")
+                    .font(.callout).foregroundStyle(.secondary)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(mesh.pairedDevices) { device in
+                        libraryMeshRow(device)
+                        if device.id != mesh.pairedDevices.last?.id {
+                            Divider().padding(.leading, 37)
+                        }
+                    }
+                }
+                .background(cardBackground, in: RoundedRectangle(cornerRadius: Radius.card))
+                .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(AppColor.hairline))
+                .clipShape(RoundedRectangle(cornerRadius: Radius.card))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func libraryMeshRow(_ device: MeshSessionModel.PairedDevice) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                expandedLibraryDevice = expandedLibraryDevice == device.id ? nil : device.id
+            } label: {
+                HStack(spacing: 13) {
+                    Circle().fill(device.online == true ? AppColor.statusOnline : AppColor.statusIdle)
+                        .frame(width: 8, height: 8)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(device.name ?? device.id.formatted)
+                            .font(.system(size: 15, weight: .medium,
+                                          design: device.name == nil ? .monospaced : .default))
+                            .foregroundStyle(.primary)
+                        Text(device.presenceText)
+                            .font(AppFont.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if device.name != nil {
+                        Text(device.id.formatted)
+                            .font(AppFont.monoCaption).foregroundStyle(.secondary)
+                    }
+                    Image(systemName: expandedLibraryDevice == device.id ? "chevron.down" : "chevron.right")
+                        .font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, Space.standard).padding(.vertical, 11)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if expandedLibraryDevice == device.id {
+                Divider().padding(.leading, 37)
+                libraryMeshDetail(device)
+            }
+        }
+    }
+
+    /// The expanded device detail (§2.5): identity and presence in
+    /// full, with the row's own actions. Fingerprint, per-device
+    /// rights and unpairing are NOT shown: the pairing store keeps
+    /// none of them today, and this screen never invents data.
+    private func libraryMeshDetail(_ device: MeshSessionModel.PairedDevice) -> some View {
+        VStack(alignment: .leading, spacing: Space.small) {
+            LabeledContent("Mesh ID") {
+                Text(device.id.formatted).font(AppFont.monoBody)
+            }
+            LabeledContent("Status") {
+                Text(device.presenceText)
+            }
+            HStack(spacing: Space.small) {
+                if mesh.chatCenter != nil {
+                    Button("Chat") { meshChatWindows.show(peer: device.id, name: device.name) }
+                        .buttonStyle(.bordered).controlSize(AppButtonStyle.rowControlSize)
+                }
+                if let controller = mesh.sessionController {
+                    Button("Connect") { controller.requestSession(to: device.id, peerName: device.name) }
+                        .buttonStyle(.bordered).controlSize(AppButtonStyle.rowControlSize)
+                        .disabled(!controller.canStartSession)
+                }
+                Spacer()
+            }
+        }
+        .padding(.horizontal, Space.standard).padding(.vertical, Space.medium)
+    }
+
+    private var libraryRecentGroup: some View {
+        VStack(alignment: .leading, spacing: Space.medium) {
+            Text(LocalizedStringKey(DeviceLibraryGroup.ultraViewerRecent.titleKey))
+                .font(AppFont.blockTitle)
+            if model.recentPartners.isEmpty {
+                Text("No recent computers yet.")
+                    .font(.callout).foregroundStyle(.secondary)
+            } else {
+                recentPartnersList
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var partnerCard: some View {
@@ -273,7 +585,7 @@ struct ConnectionView: View {
                     VStack(alignment: .leading, spacing: 7) {
                         Label(LocalizedStringKey(model.phase == .connected ? "Windows is connected" : "Connecting to Windows…"),
                               systemImage: model.phase == .connected ? "checkmark.circle.fill" : "network")
-                            .font(.callout.weight(.medium)).foregroundStyle(.blue)
+                            .font(.callout.weight(.medium)).foregroundStyle(AppColor.accent)
                         Text(L(model.status)).font(.caption).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -357,7 +669,7 @@ struct ConnectionView: View {
                           : hosting.identifier != nil ? "Waiting for Windows" : "Incoming access is paused"),
                           systemImage: hosting.phase == .sharing ? "dot.radiowaves.left.and.right" : "shield.lefthalf.filled")
                         .font(.callout.weight(.medium))
-                        .foregroundStyle(hosting.phase == .sharing ? Color.orange : Color.secondary)
+                        .foregroundStyle(hosting.phase == .sharing ? AppColor.statusLimited : Color.secondary)
                     if hosting.isRunning || hosting.phase == .failed {
                         Text(L(hosting.status)).font(.caption).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -420,9 +732,9 @@ struct ConnectionView: View {
                 .background(Color.primary.opacity(0.025))
         }
         .frame(maxWidth: .infinity, minHeight: 420, maxHeight: .infinity, alignment: .topLeading)
-        .background(cardBackground, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.primary.opacity(0.09)))
-        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .background(cardBackground, in: RoundedRectangle(cornerRadius: Radius.card))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(AppColor.hairline))
+        .clipShape(RoundedRectangle(cornerRadius: Radius.card))
     }
 
     private var incomingControlBinding: Binding<Bool> {
@@ -449,7 +761,7 @@ struct ConnectionView: View {
         VStack(alignment: .leading, spacing: 10) {
             if hosting.canControl {
                 HStack(spacing: 10) {
-                    Image(systemName: "checkmark.shield.fill").font(.system(size: 22)).foregroundStyle(.green)
+                    Image(systemName: "checkmark.shield.fill").font(.system(size: 22)).foregroundStyle(AppColor.statusOnline)
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Ready to share").font(.callout.weight(.semibold))
                         Text("Screen and control permissions are enabled.").font(.caption).foregroundStyle(.secondary)
@@ -473,20 +785,22 @@ struct ConnectionView: View {
             }
         }
         .padding(12)
-        .background(hosting.canControl ? Color.green.opacity(0.055) : Color.primary.opacity(0.035),
+        .background(hosting.canControl ? AppColor.statusOnline.opacity(0.055) : Color.primary.opacity(0.035),
                     in: RoundedRectangle(cornerRadius: 10))
     }
 
     private func permissionSummary(_ title: String, allowed: Bool) -> some View {
         HStack(spacing: 8) {
             Image(systemName: allowed ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(allowed ? Color.green : Color.secondary)
+                .foregroundStyle(allowed ? AppColor.statusOnline : Color.secondary)
             Text(LocalizedStringKey(title)).font(.callout)
             Spacer()
             Text(LocalizedStringKey(allowed ? "Allowed" : "Required")).font(.caption).foregroundStyle(.secondary)
         }
     }
 
+    /// The Control section's recents block (§2.2): header, the
+    /// one Clear action for this list, and the shared row list.
     private var recentPartners: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
@@ -497,37 +811,47 @@ struct ConnectionView: View {
                 Spacer()
                 Button("Clear history", action: model.clearRecentPartners).buttonStyle(.borderless).font(.caption)
             }
-            VStack(spacing: 0) {
-                ForEach(model.recentPartners, id: \.self) { id in
-                    Button {
-                        model.selectRecent(id)
-                        focusedField = .password
-                    } label: {
-                        HStack(spacing: 13) {
-                            Image(systemName: "pc").font(.system(size: 19)).foregroundStyle(.blue)
-                                .frame(width: 38, height: 38)
-                                .background(Color.blue.opacity(0.07), in: RoundedRectangle(cornerRadius: 9))
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(formattedID(id)).font(.system(size: 16, weight: .medium, design: .monospaced))
-                                    .foregroundStyle(.primary)
-                                Text("Windows computer").font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Text("Select").font(.callout.weight(.medium)).foregroundStyle(.blue)
-                            Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
-                        }
-                        .padding(.horizontal, 17).padding(.vertical, 13)
-                        .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain).disabled(model.isSessionActive)
-                    .contextMenu { Button("Remove from history") { model.removeRecent(id) } }
-                    if id != model.recentPartners.last { Divider().padding(.leading, 68) }
-                }
-            }
-            .background(cardBackground, in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.primary.opacity(0.08)))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            recentPartnersList
         }
+    }
+
+    /// The Mode 1 recents rows, shared by the Control section and
+    /// the Devices & History library (§2.5): one implementation, so
+    /// a row behaves identically wherever it appears. Tapping a row
+    /// loads the partner into the Control section (switching to it
+    /// from the library) and focuses its password field.
+    private var recentPartnersList: some View {
+        VStack(spacing: 0) {
+            ForEach(model.recentPartners, id: \.self) { id in
+                Button {
+                    model.selectRecent(id)
+                    section = .control
+                    focusedField = .password
+                } label: {
+                    HStack(spacing: 13) {
+                        Image(systemName: "pc").font(.system(size: 19)).foregroundStyle(.blue)
+                            .frame(width: 38, height: 38)
+                            .background(Color.blue.opacity(0.07), in: RoundedRectangle(cornerRadius: 9))
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(formattedID(id)).font(.system(size: 16, weight: .medium, design: .monospaced))
+                                .foregroundStyle(.primary)
+                            Text("Windows computer").font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Text("Select").font(.callout.weight(.medium)).foregroundStyle(.blue)
+                        Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal, 17).padding(.vertical, 13)
+                    .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain).disabled(model.isSessionActive)
+                .contextMenu { Button("Remove from history") { model.removeRecent(id) } }
+                if id != model.recentPartners.last { Divider().padding(.leading, 68) }
+            }
+        }
+        .background(cardBackground, in: RoundedRectangle(cornerRadius: Radius.card))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(AppColor.hairline))
+        .clipShape(RoundedRectangle(cornerRadius: Radius.card))
     }
 
     private var remoteSession: some View {
@@ -574,6 +898,7 @@ struct ConnectionView: View {
                                      scrollSensitivity: scrollSensitivity, inputEnabled: model.controlEnabled,
                                      onInput: model.send, cursor: model.remoteCursor)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(AppColor.videoBackdrop)
             } else {
                 VStack(spacing: 16) {
                     ProgressView().controlSize(.large)
@@ -585,7 +910,7 @@ struct ConnectionView: View {
                     Button { showSessionToolbar = true } label: { Label("Show toolbar", systemImage: "chevron.down") }
                         .buttonStyle(.borderless)
                 }
-                Circle().fill(model.phase == .connected ? .green : .orange).frame(width: 7, height: 7)
+                Circle().fill(model.phase == .connected ? AppColor.statusOnline : AppColor.statusLimited).frame(width: 7, height: 7)
                 Text(L(model.status)).lineLimit(1)
                 Spacer()
                 if let frame = model.frame { Text("\(frame.image.width) × \(frame.image.height)").monospacedDigit() }
@@ -626,7 +951,7 @@ struct ConnectionView: View {
     }
     private func errorLabel(_ text: String) -> some View {
         Label(L(text), systemImage: "exclamationmark.circle.fill")
-            .font(.callout).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+            .font(.callout).foregroundStyle(AppColor.statusError).fixedSize(horizontal: false, vertical: true)
     }
 
     private func requestSideSwitch() {
@@ -679,7 +1004,7 @@ private struct IncomingMacConnectionView: View {
                 Text("Use setup to add this copy of MacViewer in System Settings. After granting Screen Recording, reopen the app if macOS asks.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
-            if let error = hosting.errorMessage { Text(error).foregroundStyle(.red).font(.callout) }
+            if let error = hosting.errorMessage { Text(error).foregroundStyle(AppColor.statusError).font(.callout) }
             HStack {
                 Button("Decline", role: .cancel, action: hosting.decline).keyboardShortcut(.cancelAction)
                 Spacer()

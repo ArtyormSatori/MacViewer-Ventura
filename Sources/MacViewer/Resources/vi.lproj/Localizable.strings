@@ -455,3 +455,29 @@
 "Invite required to register" = "Cần mã mời để đăng ký";
 "Cannot reach the server" = "Không kết nối được máy chủ";
 "Changes apply the next time Mode 2 connects." = "Thay đổi áp dụng từ lần kết nối Chế độ 2 tiếp theo.";
+
+/* Redesign Part 2: sidebar navigation, server pill, library. */
+"Allow connections" = "Cho phép kết nối vào";
+"Devices & History" = "Thiết bị & Lịch sử";
+"Your mesh" = "Mesh của bạn";
+"This Mac" = "Máy này";
+"General" = "Chung";
+"Sharing" = "Đang chia sẻ";
+"Server settings" = "Cài đặt máy chủ";
+"Default server · Online" = "Máy chủ mặc định · Trực tuyến";
+"Custom server · Online" = "Máy chủ tuỳ chỉnh · Trực tuyến";
+"Default server · Not available yet" = "Máy chủ mặc định · Chưa khả dụng";
+"Connecting to server…" = "Đang kết nối máy chủ…";
+"Paired devices — Self-hosted" = "Đã ghép cặp — Tự host";
+"Recent Windows computers — UltraViewer" = "Máy Windows gần đây — UltraViewer";
+"Your server" = "Máy chủ của bạn";
+"Set up personal server" = "Thiết lập máy chủ cá nhân";
+"Open Self-hosted settings" = "Mở cài đặt Tự host";
+"No recent computers yet." = "Chưa có máy nào gần đây.";
+"MESH" = "MESH";
+"Status" = "Trạng thái";
+"UltraViewer" = "UltraViewer";
+"Unattended access" = "Truy cập không người trực";
+"Keyboard" = "Bàn phím";
+"Paired devices ask for your approval before each session. Devices that are not paired cannot start a session." = "Thiết bị đã ghép cặp sẽ xin phép bạn trước mỗi phiên. Thiết bị chưa ghép cặp không thể bắt đầu phiên.";
+"Screen Recording and Accessibility are needed to share this Mac's screen and control." = "Cần quyền Ghi màn hình và Trợ năng để chia sẻ màn hình và điều khiển Mac này.";
