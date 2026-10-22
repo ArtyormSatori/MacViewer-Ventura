@@ -15,12 +15,12 @@ enum AppColor {
     /// sidebar's selection, links. Follows the user's macOS accent.
     static let accent = Color.accentColor
     /// Online, direct path, healthy session.
-    static let statusOnline = Color(nsColor: .systemGreenColor)
+    static let statusOnline = Color(nsColor: .systemGreen)
     /// Relay path, waiting for approval, server unreachable,
     /// reduced quality.
-    static let statusLimited = Color(nsColor: .systemOrangeColor)
+    static let statusLimited = Color(nsColor: .systemOrange)
     /// Errors and destructive actions — only those two jobs.
-    static let statusError = Color(nsColor: .systemRedColor)
+    static let statusError = Color(nsColor: .systemRed)
     /// Offline, unknown, last-seen.
     static let statusIdle = Color.secondary
     /// Content area background.
