@@ -1,11 +1,13 @@
-## MacViewer Ventura — 4.0.3
+## MacViewer Ventura — 5.0.1
 
 **Thay đổi chính**
-- Sửa lỗi lag tăng dần và chết điều khiển trong phiên dài (báo cáo thực tế trên 4.0.1): trước đây khung hình đã giải mã mà chưa kịp hiển thị bị dồn thành hàng đợi ngày càng dài — hình vẫn chạy nhưng trễ dần, và hiệu quả của mỗi cú bấm chuột phải chờ cả hàng đợi đó. Bản này chỉ giữ khung hình mới nhất cho khâu hiển thị (bỏ khung cũ, đếm số đã bỏ), đồng thời điều tiết nhịp báo nhận hình theo tốc độ hiển thị thật (tối đa 2 khung chờ) nên độ trễ không còn tích lũy.
-- Sửa lỗi chuột/bàn phím chết im lặng: mọi thao tác gửi lệnh điều khiển nay có thời gian chờ tối đa 5 giây — nếu đường gửi bị kẹt, app báo lỗi rõ ràng và cho bật lại điều khiển thay vì treo không dấu hiệu.
-- Phát hiện đường chuyển tiếp chết một chiều: app đã có tín hiệu thăm dò tới máy đích trong mỗi phiên; bản này dùng luôn tín hiệu đó làm cổng sức khoẻ — nếu máy đích ngừng trả lời thăm dò trong khi kênh relay vẫn sống, app tự kết nối lại thay vì để phiên "sống mà không điều khiển được".
-- Ngân sách làm mới màn hình sau lỗi giải mã nay được tính theo từng phiên kết nối (không cộng dồn suốt vòng đời app), và trạng thái phím/chuột đang giữ được đồng bộ lại sau mỗi lần tự kết nối lại.
-- Cách cập nhật: máy đang chạy 4.0.1 — hoặc đã lỡ cập nhật lên "4.0.2" (bộ cài 4.0.2 thực chất vẫn là code 4.0.1 do lỗi đóng gói; bản này mới là bản sửa thật) — sẽ thấy bản 4.0.3 qua kiểm tra cập nhật trong app — bấm **Cập nhật và khởi động lại**, app tự tải, đối chiếu SHA-256, cài đè và mở lại, không có cảnh báo "nhà phát triển chưa xác định".
+
+- **Sửa lỗi bản 5.0 không mở lên được.** Gói cài đặt của bản 5.0 thiếu mất một thành phần bắt buộc là WebRTC framework — thành phần phục vụ Chế độ 2 (Tự host) — nên ngay khi mở app, macOS không tìm thấy thành phần này và đóng app lập tức. Bản 5.0.1 đóng gói đầy đủ thành phần đó vào trong app, và quy trình đóng gói từ nay tự kiểm tra để không một bản phát hành nào còn thiếu thành phần mà app cần khi khởi động.
+- **Mọi thứ còn lại giữ nguyên như bản 5.0:** hai chế độ kết nối trong cùng một app (chế độ mặc định qua UltraViewer giữ nguyên hành vi của dòng 4.0.x; chế độ Tự host kết nối hai máy cùng chạy MacViewer Ventura qua máy chủ mesh do bạn tự vận hành, hình ảnh và điều khiển truyền trực tiếp giữa hai máy bằng WebRTC), cửa sổ chat chung cho cả hai chế độ, biểu tượng app mới, giao diện sáng và tối, và mục chọn ngôn ngữ Tiếng Việt/English trong Cài đặt.
+
+**Quan trọng — nếu bản 5.0 trên máy bạn mở lên là đóng ngay:** bản 5.0 bị lỗi đó không thể tự cập nhật, vì app chưa kịp mở đã bị đóng. Hãy tải bản 5.0.1 từ trang Releases này và cài thủ công một lần: giải nén, chép đè vào thư mục Applications, rồi mở lần đầu bằng chuột phải → Open. Sau lần cài thủ công này, các lần cập nhật về sau lại diễn ra ngay trong app như bình thường.
+
+- **Máy đang chạy 4.0.x không bị ảnh hưởng bởi lỗi trên:** app vẫn mở bình thường, và bạn chỉ cần cập nhật trong app như mọi lần — app sẽ đi thẳng lên bản 5.0.1, không cần qua bản 5.0.
 
 **Cài thủ công lần đầu:** xem file Readme-macOS.txt đính kèm kèm release này (bỏ qua mục 2 nếu không dùng bản 1.0).
 
@@ -15,25 +17,19 @@ CI: toàn bộ test chạy trước khi đóng gói. Đối chiếu bản tải 
 
 ---
 
-## Bản Linux
-
-Bản Linux 4.0.3 (đồng bộ đầy đủ các sửa lỗi trên) đính kèm tại release này: `MacViewer-Ventura-4.0.3-Linux.tar.gz` và `MacViewer-Ventura-4.0.3-Linux-amd64.deb`, mỗi file kèm một file `.sha256`.
-
 ## English
 
 **Main changes**
-- Fixed progressive lag and dead control in long sessions (field report on 4.0.1): decoded frames that had not been displayed yet used to pile into an ever-growing queue — the picture kept moving but fell further behind, and every click had to wait out the queue. This release keeps only the newest frame for display (older ones are dropped and counted) and paces frame acknowledgements to the real presentation rate (at most 2 frames in flight), so latency can no longer accumulate.
-- Fixed silent mouse/keyboard death: every control send is now bounded by a 5-second timeout — if the send path wedges, the app reports a clear error and lets you re-enable control instead of hanging without a trace.
-- Detects a one-way-dead forwarding path: the app already probes the host every session; this release uses that probe as a health gate — if the host stops answering probes while the relay channel stays alive, the app reconnects instead of leaving a session that "looks alive but takes no input".
-- The screen-refresh budget after decode errors is now per connection session (not accumulated over the app's lifetime), and held key/mouse state is resynchronised after every automatic reconnect.
-- How to update: a machine running 4.0.1 — or one that already updated to "4.0.2" (whose installers actually contained the 4.0.1 code due to a packaging error; this release is the real fix) — will see 4.0.3 through the in-app update check — click **Update and Restart**; the app downloads it, verifies the SHA-256, installs in place and relaunches, with no "unidentified developer" prompt.
+
+- **Fixes version 5.0 failing to open at all.** The 5.0 package was missing a required component, the WebRTC framework — the component that powers Mode 2 (self-hosted) — so the moment the app was opened, macOS could not find that component and closed the app immediately. Version 5.0.1 packages that component inside the app in full, and the packaging process now checks itself, so no future release can ship missing a component the app needs at launch.
+- **Everything else is identical to version 5.0:** two connection modes in one app (the default mode through UltraViewer keeps the exact behavior of the 4.0.x line; the self-hosted mode connects two machines running MacViewer Ventura through a mesh server you operate yourself, with the picture and control traveling directly between the two machines over WebRTC), one shared chat window for both modes, the new app icon, light and dark appearances, and the Tiếng Việt/English language setting in Settings.
+
+**Important — if version 5.0 on your machine closes the moment you open it:** a 5.0 copy with this fault cannot update itself, because the app is closed before it can run. Download version 5.0.1 from this Releases page and install it manually once: unzip it, copy it over the existing app in your Applications folder, then open it the first time with right-click → Open. After this one manual install, later updates happen inside the app as usual.
+
+- **Machines still running 4.0.x are not affected by the fault:** the app opens normally, and you update in-app as always — the app goes straight to version 5.0.1, with no need to pass through 5.0.
 
 **First manual install:** see the Readme-macOS.txt attached to this release (skip section 2 unless you use release 1.0).
 
 If macOS shows the "unidentified developer" warning on the first launch after a manual install, run this once in Terminal: `xattr -dr com.apple.quarantine /Applications/MacViewer.app` — or open the app with right-click → Open.
 
 CI: the full test suite runs before packaging. Verify downloads with SHA256SUMS-macOS.txt.
-
-## Linux build
-
-The Linux 4.0.3 build (with all of the fixes above synced) is attached to this release: `MacViewer-Ventura-4.0.3-Linux.tar.gz` and `MacViewer-Ventura-4.0.3-Linux-amd64.deb`, each with a `.sha256` sidecar.
