@@ -6,10 +6,19 @@ import Testing
 @MainActor
 struct MeshSessionModelTests {
     private func makeModel(store: InMemoryMeshIdentityStore = InMemoryMeshIdentityStore(),
-                           server: FakeMeshServer) -> MeshSessionModel {
+                           server: FakeMeshServer,
+                           serverTarget: (@Sendable () -> (url: URL, isCustom: Bool))? = nil) -> MeshSessionModel {
         MeshSessionModel(identityStore: store,
                          makeClient: { _ in server },
-                         makeSignaling: { _, _, _ in nil })
+                         makeSignaling: { _, _, _ in nil },
+                         serverTarget: serverTarget)
+    }
+
+    private static let defaultTarget: @Sendable () -> (url: URL, isCustom: Bool) = {
+        (MeshDefaults.serverURL, false)
+    }
+    private static let customTarget: @Sendable () -> (url: URL, isCustom: Bool) = {
+        (URL(string: "http://vega.lan:8734")!, true)
     }
 
     @Test("First run without a Keychain identity asks to create one")
@@ -24,7 +33,10 @@ struct MeshSessionModelTests {
     func createIdentityRegisters() async throws {
         let store = InMemoryMeshIdentityStore()
         let server = FakeMeshServer()
-        let model = makeModel(store: store, server: server)
+        // Pinned to a custom server: under decision D2 the default
+        // server never receives an invite from the client, so the
+        // invite-passthrough this test pins lives on the custom path.
+        let model = makeModel(store: store, server: server, serverTarget: Self.customTarget)
         await model.start()
         await model.createIdentity(name: "Test Mac", invite: "INVITE-1")
         #expect(model.phase == .ready)
@@ -101,6 +113,111 @@ struct MeshSessionModelTests {
         #expect(model.pairedDevices.map(\.id) == [peer])
     }
 
+    // MARK: Server foundation (redesign Part 1)
+
+    @Test("Default server down: no blind registration, local identity and Mesh ID stay, honest state, no error")
+    func defaultServerNotAvailable() async throws {
+        let store = InMemoryMeshIdentityStore()
+        try store.saveIdentity(MeshIdentity())
+        try store.saveMeshID(FakeMeshServer.assignedID)
+        let server = FakeMeshServer()
+        server.healthResult = false
+        let model = makeModel(store: store, server: server, serverTarget: Self.defaultTarget)
+        await model.start()
+        #expect(model.phase == .serverUnavailable)
+        #expect(model.serverAvailability == .defaultNotAvailable)
+        #expect(server.healthCalls == 1)
+        #expect(server.registerCalls == 0)
+        #expect(model.meshID == FakeMeshServer.assignedID)
+        #expect(model.errorMessage == nil)
+        #expect(try store.loadIdentity() != nil)
+    }
+
+    @Test("Creating an identity while the default server is down still creates it locally")
+    func createIdentityWhileDefaultDown() async throws {
+        let store = InMemoryMeshIdentityStore()
+        let server = FakeMeshServer()
+        server.healthResult = false
+        let model = makeModel(store: store, server: server, serverTarget: Self.defaultTarget)
+        await model.createIdentity(name: "Test Mac", invite: "")
+        #expect(try store.loadIdentity() != nil)
+        #expect(model.phase == .serverUnavailable)
+        #expect(model.serverAvailability == .defaultNotAvailable)
+        #expect(server.registerCalls == 0)
+    }
+
+    @Test("Registration against the default server never sends an invite (decision D2)")
+    func defaultServerGetsNoInvite() async {
+        let server = FakeMeshServer()
+        let model = makeModel(server: server, serverTarget: Self.defaultTarget)
+        await model.createIdentity(name: "Test Mac", invite: "MUST-NOT-BE-SENT")
+        #expect(model.phase == .ready)
+        #expect(server.lastInvite == "")
+    }
+
+    @Test("A custom server that refuses registration for an invite reports inviteRequired")
+    func customServerInviteRequired() async {
+        let server = FakeMeshServer()
+        server.registerError = .inviteRequired
+        let model = makeModel(server: server, serverTarget: Self.customTarget)
+        await model.createIdentity(name: "Test Mac", invite: "")
+        #expect(model.serverAvailability == .inviteRequired)
+        #expect(server.healthCalls == 0)
+        guard case .offline = model.phase else {
+            Issue.record("expected offline phase, got \(model.phase)")
+            return
+        }
+    }
+
+    @Test("A custom server consumes the pending invite saved by the personal-server frame, once")
+    func customServerConsumesPendingInvite() async {
+        UserDefaults.standard.removeObject(forKey: MeshDefaults.pendingInviteKey)
+        defer { UserDefaults.standard.removeObject(forKey: MeshDefaults.pendingInviteKey) }
+        UserDefaults.standard.set("PEND-1", forKey: MeshDefaults.pendingInviteKey)
+        let server = FakeMeshServer()
+        let model = makeModel(server: server, serverTarget: Self.customTarget)
+        await model.createIdentity(name: "Test Mac", invite: "")
+        #expect(server.lastInvite == "PEND-1")
+        #expect(UserDefaults.standard.string(forKey: MeshDefaults.pendingInviteKey) == nil)
+    }
+
+    @Test("Default server healthy but registration fails on transport: unreachable, offline phase")
+    func defaultHealthyButRegisterFails() async {
+        let server = FakeMeshServer()
+        server.registerError = .transport("connection reset")
+        let model = makeModel(server: server, serverTarget: Self.defaultTarget)
+        await model.createIdentity(name: "Test Mac", invite: "")
+        #expect(server.healthCalls == 1)
+        #expect(server.registerCalls == 1)
+        #expect(model.serverAvailability == .unreachable)
+        guard case .offline = model.phase else {
+            Issue.record("expected offline phase, got \(model.phase)")
+            return
+        }
+    }
+
+    @Test("Switching servers mid-state: refresh after the switch re-registers against the new target")
+    func switchServerMidState() async throws {
+        let store = InMemoryMeshIdentityStore()
+        try store.saveIdentity(MeshIdentity())
+        let server = FakeMeshServer()
+        server.healthResult = false
+        let box = TargetBox(target: (MeshDefaults.serverURL, false))
+        let model = makeModel(store: store, server: server, serverTarget: { box.target })
+        await model.start()
+        #expect(model.phase == .serverUnavailable)
+        #expect(server.registerCalls == 0)
+        // The user saves a working custom server in Settings; the
+        // same model instance refreshes against the new target.
+        box.target = (URL(string: "http://vega.lan:8734")!, true)
+        server.healthResult = true
+        await model.refresh()
+        #expect(model.phase == .ready)
+        #expect(model.serverAvailability == .online)
+        #expect(server.registerCalls == 1)
+        #expect(model.meshID == FakeMeshServer.assignedID)
+    }
+
     @Test("Approve and reject drain the pending list; approve pairs the device")
     func approveAndReject() async {
         let server = FakeMeshServer()
@@ -120,11 +237,21 @@ struct MeshSessionModelTests {
     }
 }
 
+/// Mutable server target for the mid-state switch test: the model's
+/// target closure reads whatever the box currently holds, exactly
+/// like the production closure reads the current MeshDefaults.
+private final class TargetBox: @unchecked Sendable {
+    var target: (url: URL, isCustom: Bool)
+    init(target: (url: URL, isCustom: Bool)) { self.target = target }
+}
+
 /// In-memory `MeshServerAPI` double: no network, no signaling.
 private final class FakeMeshServer: MeshServerAPI, @unchecked Sendable {
     static let assignedID = MeshID(unchecked: "482913705")
 
     private let lock = NSLock()
+    var healthResult = true
+    var healthCalls = 0
     var registerError: MeshError?
     var registerCalls = 0
     var lastInvite: String?
@@ -136,6 +263,13 @@ private final class FakeMeshServer: MeshServerAPI, @unchecked Sendable {
     var paired: [MeshID] = []
     var approvedPeers: [MeshID] = []
     var rejectedPeers: [MeshID] = []
+
+    func checkHealth() async -> Bool {
+        lock.withLock {
+            healthCalls += 1
+            return healthResult
+        }
+    }
 
     func register(identity: MeshIdentity, name: String, invite: String) async throws -> MeshID {
         try lock.withLock {
