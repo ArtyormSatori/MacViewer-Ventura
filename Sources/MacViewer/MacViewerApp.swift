@@ -68,7 +68,6 @@ struct MacViewerSettings: View {
     @AppStorage(UpdateChecker.automaticKey) private var checkForUpdates = true
     @AppStorage(SessionToolsModel.shareClipboardKey) private var shareClipboard = true
     @AppStorage(AppAppearance.defaultsKey) private var appearance = AppAppearance.system.rawValue
-    @AppStorage(MeshDefaults.serverAddressKey) private var meshServerAddress = ""
 
     var body: some View {
         Form {
@@ -90,13 +89,7 @@ struct MacViewerSettings: View {
                 Text("System follows your Mac's appearance. Applies to the whole app, in both modes.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("Self-hosted") {
-                TextField("Server address", text: $meshServerAddress,
-                          prompt: Text(MeshDefaults.serverURL.absoluteString))
-                    .textFieldStyle(.roundedBorder)
-                Text("Leave empty to use the default server. Changes apply the next time Mode 2 connects.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
+            MeshServerSettingsSection()
             Section("History") {
                 Toggle("Remember successfully connected partner IDs", isOn: $rememberPartners)
                     .onChange(of: rememberPartners) { enabled in

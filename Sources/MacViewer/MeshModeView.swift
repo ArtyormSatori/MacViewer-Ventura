@@ -131,10 +131,24 @@ struct MeshModeView: View {
                 }
             }
             statusLine
-            if mesh.meshID == nil {
-                // Identity exists but this server has never registered
-                // it (e.g. an invite-gated server). Offer the retry
-                // with an invite instead of a dead end.
+            if mesh.phase == .serverUnavailable {
+                // The built-in default server is not deployed yet
+                // (redesign spec §3.3): a quiet explanation and a way
+                // forward — never a red error, never a dead end.
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("The project's default server is not running yet. In the meantime, you can use your own server.")
+                        .font(.callout).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Open personal server settings") { openServerSettings() }
+                        .buttonStyle(.bordered).controlSize(.small)
+                }
+            }
+            if mesh.meshID == nil && mesh.isUsingCustomServer {
+                // Identity exists but this custom server has never
+                // registered it (e.g. an invite-gated server). Offer
+                // the retry with an invite instead of a dead end.
+                // The default server never asks the client for an
+                // invite (decision D2), so this stays custom-only.
                 HStack(spacing: 8) {
                     TextField("Invite code", text: $inviteCode)
                         .textFieldStyle(.roundedBorder).frame(maxWidth: 240)
@@ -176,7 +190,31 @@ struct MeshModeView: View {
             if let host = mesh.serverURL.host {
                 Text(host).font(.callout).foregroundStyle(.secondary)
             }
+            if let availabilityText {
+                Text("·").foregroundStyle(.secondary)
+                Text(LocalizedStringKey(availabilityText))
+                    .font(.callout).foregroundStyle(.secondary)
+            }
         }
+    }
+
+    /// The observed server availability, in words (spec §3.2). Nil
+    /// when there is nothing extra to say: online is already carried
+    /// by the presence dot, and unknown/checking by the spinner.
+    private var availabilityText: String? {
+        switch mesh.serverAvailability {
+        case .defaultNotAvailable: return "Not available yet"
+        case .inviteRequired: return "Invite required to register"
+        case .unreachable: return "Cannot reach the server"
+        case .unknown, .checking, .online: return nil
+        }
+    }
+
+    /// Opens the app's Settings scene (macOS 13 path, mirroring the
+    /// gear button in the main window): the personal-server frame
+    /// lives in Settings → Self-hosted.
+    private func openServerSettings() {
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
     }
 
     // MARK: Connect (§5.2)

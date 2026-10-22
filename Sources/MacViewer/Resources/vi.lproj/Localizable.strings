@@ -427,3 +427,31 @@
 "Sharing screen" = "Đang chia sẻ màn hình";
 "Screen sharing failed: %@" = "Chia sẻ màn hình thất bại: %@";
 "%@ is not connected. Chat works during a session with this computer." = "%@ chưa kết nối. Trò chuyện chỉ hoạt động trong phiên kết nối với máy tính này.";
+
+/* Personal-server frame and server availability (redesign Part 1). */
+"Server in use" = "Máy chủ đang dùng";
+"Server" = "Máy chủ";
+"Optional" = "Tuỳ chọn";
+"Test connection" = "Kiểm tra kết nối";
+"Testing connection…" = "Đang kiểm tra kết nối…";
+"Server reachable · %d ms" = "Tới được máy chủ · %d ms";
+"Could not reach a server at this address. Check the address and that the server is running." = "Không tới được máy chủ ở địa chỉ này. Hãy kiểm tra lại địa chỉ và chắc chắn máy chủ đang chạy.";
+"This server requires an invite code to register a new device." = "Máy chủ này yêu cầu mã mời để đăng ký thiết bị mới.";
+"That address is not usable. Enter a host, a host:port, or a full URL." = "Địa chỉ này không dùng được. Hãy nhập một tên máy, một tên máy kèm cổng, hoặc một URL đầy đủ.";
+"Save and switch to this server" = "Lưu và chuyển sang máy chủ này";
+"Save is enabled after a successful connection test." = "Nút lưu chỉ bật sau khi kiểm tra kết nối thành công.";
+"Use default server" = "Dùng máy chủ mặc định";
+"Switching servers changes which pairings you see. Pairings on the other server are kept and come back when you switch back." = "Đổi máy chủ sẽ đổi danh sách thiết bị đã ghép cặp mà bạn thấy. Ghép cặp ở máy chủ còn lại vẫn được giữ và sẽ hiện lại khi bạn quay về.";
+"Saved. This server will be used from the next Mode 2 connection." = "Đã lưu. Máy chủ này sẽ được dùng từ lần kết nối Chế độ 2 tiếp theo.";
+"The default server is in use." = "Đang dùng máy chủ mặc định.";
+"The server only introduces devices to each other. Your screen and input stay end-to-end encrypted between the two devices, so the server never sees a session. Pairings belong to the server in use, so switching servers means pairing again on the new server — pairings on the old server are kept." = "Máy chủ chỉ giới thiệu các thiết bị với nhau. Hình ảnh và thao tác của bạn luôn được mã hoá đầu-cuối giữa hai thiết bị, nên máy chủ không bao giờ xem được nội dung phiên. Ghép cặp thuộc về máy chủ đang dùng, nên đổi máy chủ nghĩa là ghép cặp lại trên máy chủ mới — còn ghép cặp ở máy chủ cũ vẫn được giữ nguyên.";
+"Create your own server" = "Tự tạo máy chủ cho mình";
+"1. Get the server program: the mesh-server package that ships with the project (see SELF_HOSTING.md)." = "1. Lấy chương trình máy chủ: gói mesh-server đi kèm dự án (xem SELF_HOSTING.md).";
+"2. Run it on a machine that stays on — a home computer, a NAS, or a small VPS — and note its address and an invite code." = "2. Chạy nó trên một máy luôn bật — máy tính ở nhà, NAS, hoặc một VPS nhỏ — và ghi lại địa chỉ của nó cùng một mã mời.";
+"3. Come back here, enter the address and invite code above, then press Test connection." = "3. Quay lại đây, nhập địa chỉ và mã mời ở phần trên, rồi bấm Kiểm tra kết nối.";
+"Open personal server settings" = "Mở cài đặt máy chủ cá nhân";
+"The project's default server is not running yet. In the meantime, you can use your own server." = "Máy chủ mặc định của dự án chưa hoạt động. Trong lúc chờ, bạn có thể dùng máy chủ của riêng mình.";
+"Not available yet" = "Chưa khả dụng";
+"Invite required to register" = "Cần mã mời để đăng ký";
+"Cannot reach the server" = "Không kết nối được máy chủ";
+"Changes apply the next time Mode 2 connects." = "Thay đổi áp dụng từ lần kết nối Chế độ 2 tiếp theo.";

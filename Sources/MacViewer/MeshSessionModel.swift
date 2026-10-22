@@ -7,6 +7,8 @@ import MeshClient
 /// this protocol instead so unit tests can drive it with a fake. The
 /// core package is untouched — conformance is declared here.
 protocol MeshServerAPI: Sendable {
+    /// `GET /healthz` — true when a MacViewer server answers there.
+    func checkHealth() async -> Bool
     func register(identity: MeshIdentity, name: String, invite: String) async throws -> MeshID
     func requestPairing(identity: MeshIdentity, meshID: MeshID, peer: MeshID) async throws -> PairingRequestResult
     func listPendingPairings(identity: MeshIdentity, meshID: MeshID) async throws -> [MeshID]
@@ -16,7 +18,9 @@ protocol MeshServerAPI: Sendable {
     func presence(of meshID: MeshID) async throws -> Presence
 }
 
-extension MeshServerClient: MeshServerAPI {}
+extension MeshServerClient: MeshServerAPI {
+    func checkHealth() async -> Bool { await health() }
+}
 
 /// Mode 2 (self-hosted mesh) state for the main window: this device's
 /// identity and presence, incoming pairing requests, and the paired
@@ -40,6 +44,13 @@ final class MeshSessionModel: ObservableObject {
         /// us just now (unreachable, or an invite is required). The
         /// card stays usable and registration retries on refresh.
         case offline(String)
+        /// The built-in default server is not available (its health
+        /// probe failed), so no registration was attempted. The local
+        /// identity — and a previously assigned Mesh ID — stay in
+        /// place; this is the expected state until the project
+        /// deploys its server, presented quietly, not as an error
+        /// (redesign spec §3.3).
+        case serverUnavailable
     }
 
     struct PairedDevice: Identifiable, Equatable {
@@ -58,6 +69,11 @@ final class MeshSessionModel: ObservableObject {
     @Published var deviceName: String
     @Published private(set) var statusMessage: String?
     @Published private(set) var errorMessage: String?
+    /// What the app has actually observed about the configured
+    /// server's availability (redesign spec §3.2). Drives the
+    /// This-device status line; updated by the health gate and by
+    /// registration outcomes, never guessed.
+    @Published private(set) var serverAvailability: MeshServerAvailability = .unknown
     @Published private(set) var isBusy = false
     /// The session-negotiation controller bound to the live signaling
     /// connection, if any. Rebuilt whenever signaling reconnects.
@@ -77,19 +93,26 @@ final class MeshSessionModel: ObservableObject {
     private let identityStore: any MeshIdentityStore
     private let makeClient: (URL) -> any MeshServerAPI
     private let makeSignaling: (URL, MeshIdentity, MeshID) -> MeshSignalingClient?
+    /// Resolves the server in effect at call time (Settings override
+    /// wins). Injectable so tests can pin default vs custom.
+    private let serverTarget: @Sendable () -> (url: URL, isCustom: Bool)
     private var identity: MeshIdentity?
     private var client: (url: URL, api: any MeshServerAPI)?
     private var signaling: MeshSignalingClient?
 
     init(identityStore: any MeshIdentityStore = KeychainMeshIdentityStore(),
          makeClient: ((URL) -> any MeshServerAPI)? = nil,
-         makeSignaling: ((URL, MeshIdentity, MeshID) -> MeshSignalingClient?)? = nil) {
+         makeSignaling: ((URL, MeshIdentity, MeshID) -> MeshSignalingClient?)? = nil,
+         serverTarget: (@Sendable () -> (url: URL, isCustom: Bool))? = nil) {
         self.identityStore = identityStore
         self.makeClient = makeClient ?? { url in
             MeshServerClient(baseURL: url, pairingRecord: FilePairingRecord(directory: Self.supportDirectory, server: url))
         }
         self.makeSignaling = makeSignaling ?? { url, identity, meshID in
             MeshSignalingClient(serverBaseURL: url, identity: identity, meshID: meshID)
+        }
+        self.serverTarget = serverTarget ?? {
+            (MeshDefaults.currentServerURL, MeshDefaults.isUsingCustomServer)
         }
         self.deviceName = MeshDefaults.deviceName
     }
@@ -101,8 +124,8 @@ final class MeshSessionModel: ObservableObject {
     }
 
     /// The server the next client build will use (Settings override wins).
-    var serverURL: URL { MeshDefaults.currentServerURL }
-    var isUsingCustomServer: Bool { MeshDefaults.isUsingCustomServer }
+    var serverURL: URL { serverTarget().url }
+    var isUsingCustomServer: Bool { serverTarget().isCustom }
 
     // MARK: Lifecycle
 
@@ -201,6 +224,7 @@ final class MeshSessionModel: ObservableObject {
         await signaling?.close()
         signaling = nil
         isOnline = false
+        serverAvailability = .unknown
     }
 
     /// Called after the Settings server address changes: presence and
@@ -292,26 +316,67 @@ final class MeshSessionModel: ObservableObject {
     // MARK: Internals
 
     private func clientForCurrentServer() -> any MeshServerAPI {
-        let url = MeshDefaults.currentServerURL
+        let url = serverTarget().url
         if let client, client.url == url { return client.api }
         let api = makeClient(url)
         client = (url, api)
         return api
     }
 
+    /// The invite a registration against a CUSTOM server should use:
+    /// the one passed in wins; otherwise the one-shot invite saved by
+    /// the personal-server frame, consumed here. The default server
+    /// never gets an invite from the client (open registration is the
+    /// approved policy for it — redesign decision D2), so this
+    /// returns "" whenever the target is the default.
+    private func effectiveInvite(requested: String, isCustom: Bool) -> String {
+        guard isCustom else { return "" }
+        if !requested.isEmpty { return requested }
+        let pending = UserDefaults.standard.string(forKey: MeshDefaults.pendingInviteKey) ?? ""
+        if !pending.isEmpty {
+            UserDefaults.standard.removeObject(forKey: MeshDefaults.pendingInviteKey)
+        }
+        return pending
+    }
+
     private func registerAndRefresh(invite: String) async {
         guard let identity else { return }
         phase = .working
         errorMessage = nil
+        let target = serverTarget()
         let api = clientForCurrentServer()
+        if !target.isCustom {
+            // Health gate (redesign spec §3.1/§3.3): never fire a
+            // blind registration at the built-in default server. If
+            // its health probe fails, the local identity (and any
+            // previously assigned Mesh ID) simply stays in place in
+            // an honest not-available state — no raw network error
+            // is surfaced as a failure.
+            serverAvailability = .checking
+            guard await api.checkHealth() else {
+                serverAvailability = .defaultNotAvailable
+                phase = .serverUnavailable
+                return
+            }
+        }
         do {
-            let assigned = try await api.register(identity: identity, name: deviceName, invite: invite)
+            let assigned = try await api.register(
+                identity: identity, name: deviceName,
+                invite: effectiveInvite(requested: invite, isCustom: target.isCustom))
             if assigned != meshID {
                 meshID = assigned
                 try? identityStore.saveMeshID(assigned)
             }
+            serverAvailability = .online
             phase = .ready
+        } catch let error as MeshError where error == .inviteRequired {
+            // The server itself signaled the invite requirement —
+            // the only honest way this state is ever reached.
+            serverAvailability = .inviteRequired
+            phase = .offline(String(describing: error))
+            return
         } catch {
+            serverAvailability = .unreachable
             phase = .offline(String(describing: error))
             return
         }
