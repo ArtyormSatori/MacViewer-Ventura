@@ -127,9 +127,15 @@ public struct SignalingEnvelope: Codable, Equatable, Sendable {
         case ref
     }
 
-    /// Encodes to the exact JSON text sent on the wire.
+    /// Encodes to the exact JSON text sent on the wire. Keys are
+    /// sorted so the encoding is a deterministic fixed point:
+    /// decoding a frame and re-encoding it reproduces the identical
+    /// text (JSON object key order carries no meaning for either
+    /// peer, and an unsorted encoder does not promise a stable one).
     public func encodedJSON() throws -> String {
-        let data = try JSONEncoder().encode(self)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(self)
         guard let text = String(data: data, encoding: .utf8) else {
             throw MeshError.decoding("envelope did not encode as UTF-8")
         }
