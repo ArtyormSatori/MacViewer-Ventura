@@ -53,17 +53,17 @@ struct ChatConversationView<Transport: ChatTransport>: View {
         .padding(.horizontal, 12).padding(.vertical, 9)
     }
 
+    /// §4's chat empty state: one centered secondary line. With
+    /// no factual note of its own, the transport shows the plain
+    /// first-message line; an offline peer's factual note (the
+    /// transport's own words) takes its place instead.
     private var emptyState: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "bubble.left.and.bubble.right")
-                .font(.system(size: 30)).foregroundStyle(.secondary)
-            Text(transport.emptyStateNote ?? L("No messages yet."))
-                .font(.callout).foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        Text(transport.emptyStateNote ?? L(ChatEmptyPresentation.textKey))
+            .font(.callout).foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var transcript: some View {

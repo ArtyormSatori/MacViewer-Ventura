@@ -15,6 +15,9 @@ struct ConnectionView: View {
     @ObservedObject var mesh: MeshSessionModel
     @State private var meshSessionWindows = MeshSessionWindows()
     @State private var meshChatWindows = MeshChatWindows()
+    /// One-shot Connect-field focus requests from the library's
+    /// paired-devices empty state (redesign spec §4).
+    @StateObject private var meshConnectFocus = MeshConnectFocusRequest()
     @State private var uvChatWindows = UltraViewerChatWindows()
     /// The sidebar destination (redesign §1.1, D1), restored from
     /// the remembered section — or, before that key existed, from
@@ -295,7 +298,7 @@ struct ConnectionView: View {
             controlDetail
                 .navigationTitle(L(MainSection.control.titleKey))
         case .selfHosted:
-            MeshModeView(mesh: mesh, onOpenChat: { device in
+            MeshModeView(mesh: mesh, connectFocus: meshConnectFocus, onOpenChat: { device in
                 meshChatWindows.show(peer: device.id, name: device.name)
             })
             .navigationTitle(L(MainSection.selfHosted.titleKey))
@@ -317,7 +320,7 @@ struct ConnectionView: View {
                 Text("Control").font(AppFont.screenTitle)
                 partnerCard
                     .fixedSize(horizontal: false, vertical: true)
-                if !model.recentPartners.isEmpty { recentPartners }
+                recentPartnersBlock
             }
             .frame(maxWidth: MainWindowLayout.contentMaxWidth)
             .padding(.horizontal, MainWindowLayout.contentHorizontalPadding)
@@ -423,9 +426,17 @@ struct ConnectionView: View {
     /// that owns the row.
     private var devicesHistoryDetail: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Space.large) {
-                libraryMeshGroup
-                libraryRecentGroup
+            Group {
+                if libraryGroups.presentation == .combinedEmpty {
+                    // §4: both stores empty is ONE state for the
+                    // whole screen, not two empty groups.
+                    libraryCombinedEmpty
+                } else {
+                    VStack(alignment: .leading, spacing: Space.large) {
+                        libraryMeshGroup
+                        libraryRecentGroup
+                    }
+                }
             }
             .frame(maxWidth: MainWindowLayout.contentMaxWidth)
             .padding(.horizontal, MainWindowLayout.contentHorizontalPadding)
@@ -436,13 +447,36 @@ struct ConnectionView: View {
         .clipped()
     }
 
+    private var libraryGroups: LibraryGroups<MeshSessionModel.PairedDevice, String> {
+        LibraryGroups(meshDevices: mesh.pairedDevices, recentPartners: model.recentPartners)
+    }
+
+    /// The library's combined empty state (§4): two short
+    /// sentences pointing at the two ways to start. Text only —
+    /// the spec gives this state no action of its own (§1.8).
+    private var libraryCombinedEmpty: some View {
+        VStack(alignment: .leading, spacing: Space.small) {
+            Text(LocalizedStringKey(DeviceLibraryEmptyPresentation.titleKey))
+                .font(AppFont.body.weight(.medium))
+            Text(LocalizedStringKey(DeviceLibraryEmptyPresentation.guidanceKey))
+                .font(AppFont.body).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Space.large)
+        .background(cardBackground, in: RoundedRectangle(cornerRadius: Radius.card))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(AppColor.hairline))
+    }
+
     private var libraryMeshGroup: some View {
         VStack(alignment: .leading, spacing: Space.medium) {
             Text(LocalizedStringKey(DeviceLibraryGroup.meshPaired.titleKey))
                 .font(AppFont.blockTitle)
             if mesh.pairedDevices.isEmpty {
-                Text("No paired devices yet.")
-                    .font(.callout).foregroundStyle(.secondary)
+                PairedDevicesEmptyView {
+                    meshConnectFocus.request()
+                    section = .selfHosted
+                }
             } else {
                 VStack(spacing: 0) {
                     ForEach(mesh.pairedDevices) { device in
@@ -796,6 +830,25 @@ struct ConnectionView: View {
             Text(LocalizedStringKey(title)).font(.callout)
             Spacer()
             Text(LocalizedStringKey(allowed ? "Allowed" : "Required")).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    /// The Control section's recents block (§2.2, §4): the block
+    /// never disappears. Empty, it is the header and one quiet
+    /// line — and no Clear action, because there is nothing to
+    /// clear (§1.8: no dead buttons).
+    @ViewBuilder
+    private var recentPartnersBlock: some View {
+        if model.recentPartners.isEmpty {
+            VStack(alignment: .leading, spacing: Space.medium) {
+                Text(LocalizedStringKey(RecentPartnersEmptyPresentation.titleKey)).font(.headline)
+                Text(LocalizedStringKey(RecentPartnersEmptyPresentation.textKey))
+                    .font(.callout).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            recentPartners
         }
     }
 

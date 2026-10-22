@@ -108,6 +108,10 @@ final class MeshSessionModel: ObservableObject {
     /// Resolves the server in effect at call time (Settings override
     /// wins). Injectable so tests can pin default vs custom.
     private let serverTarget: @Sendable () -> (url: URL, isCustom: Bool)
+    /// Clears the stored custom-server override. Injectable so the
+    /// in-place switch to the default server (spec §3.3) is testable
+    /// against the same dynamic target the model reads.
+    private let resetServerOverride: @Sendable () -> Void
     private var identity: MeshIdentity?
     private var client: (url: URL, api: any MeshServerAPI)?
     private var signaling: MeshSignalingClient?
@@ -115,7 +119,8 @@ final class MeshSessionModel: ObservableObject {
     init(identityStore: any MeshIdentityStore = KeychainMeshIdentityStore(),
          makeClient: ((URL) -> any MeshServerAPI)? = nil,
          makeSignaling: ((URL, MeshIdentity, MeshID) -> MeshSignalingClient?)? = nil,
-         serverTarget: (@Sendable () -> (url: URL, isCustom: Bool))? = nil) {
+         serverTarget: (@Sendable () -> (url: URL, isCustom: Bool))? = nil,
+         resetServerOverride: (@Sendable () -> Void)? = nil) {
         self.identityStore = identityStore
         self.makeClient = makeClient ?? { url in
             MeshServerClient(baseURL: url, pairingRecord: FilePairingRecord(directory: Self.supportDirectory, server: url))
@@ -125,6 +130,9 @@ final class MeshSessionModel: ObservableObject {
         }
         self.serverTarget = serverTarget ?? {
             (MeshDefaults.currentServerURL, MeshDefaults.isUsingCustomServer)
+        }
+        self.resetServerOverride = resetServerOverride ?? {
+            MeshDefaults.useDefaultServer()
         }
         self.deviceName = MeshDefaults.deviceName
     }
@@ -246,6 +254,16 @@ final class MeshSessionModel: ObservableObject {
         await stop()
         client = nil
         if identity != nil { await refresh() }
+    }
+
+    /// In-place switch back to the built-in default server (spec
+    /// §3.3, the custom-server-unreachable state's own action — the
+    /// user does not have to detour through Settings). Pairing
+    /// records are stored per server and untouched by the switch.
+    func switchToDefaultServer() async {
+        guard isUsingCustomServer else { return }
+        resetServerOverride()
+        await serverChanged()
     }
 
     // MARK: Pairing actions

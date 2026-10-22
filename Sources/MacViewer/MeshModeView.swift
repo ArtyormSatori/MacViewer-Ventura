@@ -7,14 +7,18 @@ import SwiftUI
 /// Before an identity exists it shows the first-run surface (§6.1).
 struct MeshModeView: View {
     @ObservedObject var mesh: MeshSessionModel
+    /// One-shot focus requests for the Connect field, raised by
+    /// the Devices & History library's paired-devices empty state.
+    @ObservedObject var connectFocus: MeshConnectFocusRequest
     /// Opens the shared chat window for a paired device (Phase 3,
     /// chunk 3). Owned by ConnectionView, which owns the windows.
     var onOpenChat: ((MeshSessionModel.PairedDevice) -> Void)?
     @State private var connectID = ""
     @State private var createName = ""
-    @State private var inviteCode = ""
     @State private var nameDraft = ""
     @State private var didStart = false
+    @StateObject private var inviteSheet = MeshInviteSheetModel()
+    @FocusState private var connectFieldFocused: Bool
 
     var body: some View {
         ScrollView {
@@ -55,6 +59,29 @@ struct MeshModeView: View {
                 await mesh.refreshLists()
             }
         }
+        .onAppear {
+            if connectFocus.consumePending() { connectFieldFocused = true }
+        }
+        .onChange(of: connectFocus.generation) { _ in
+            if connectFocus.consumePending() { connectFieldFocused = true }
+        }
+        .onChange(of: mesh.serverAvailability) { availability in
+            // §3.5, first door: a real invite refusal raises the
+            // one contextual sheet — exactly once, because
+            // `present()` is a no-op while the sheet is up.
+            if availability == .inviteRequired { inviteSheet.present() }
+        }
+        .sheet(isPresented: inviteSheetPresented) {
+            MeshInviteSheetView(model: inviteSheet, mesh: mesh)
+        }
+    }
+
+    private var inviteSheetPresented: Binding<Bool> {
+        Binding(
+            get: { inviteSheet.isPresented },
+            set: { presented in
+                if presented { inviteSheet.present() } else { inviteSheet.cancel() }
+            })
     }
 
     // MARK: First run (§6.1)
@@ -76,20 +103,13 @@ struct MeshModeView: View {
                 TextField("Device name", text: $createName)
                     .textFieldStyle(.roundedBorder).frame(maxWidth: 360)
             }
-            VStack(alignment: .leading, spacing: 7) {
-                Text("Invite code").font(.callout.weight(.medium))
-                TextField("Invite code", text: $inviteCode)
-                    .textFieldStyle(.roundedBorder).frame(maxWidth: 360)
-                Text("Only needed when your server requires one for a first registration.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
             if let error = mesh.errorMessage {
                 Label(error, systemImage: "exclamationmark.circle.fill")
                     .font(.callout).foregroundStyle(AppColor.statusError)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Button {
-                Task { await mesh.createIdentity(name: createName, invite: inviteCode) }
+                Task { await mesh.createIdentity(name: createName, invite: "") }
             } label: {
                 Label("Create identity", systemImage: "person.crop.circle.badge.plus")
                     .frame(minWidth: 180, minHeight: 28)
@@ -138,39 +158,16 @@ struct MeshModeView: View {
                 }
             }
             statusLine
-            if mesh.phase == .serverUnavailable {
-                // The built-in default server is not deployed yet
-                // (redesign spec §3.3): a quiet explanation and a way
-                // forward — never a red error, never a dead end.
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("The project's default server is not running yet. In the meantime, you can use your own server.")
-                        .font(.callout).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Button("Open personal server settings") { openServerSettings() }
-                        .buttonStyle(.bordered).controlSize(.small)
-                }
-            }
-            if mesh.meshID == nil && mesh.isUsingCustomServer {
-                // Identity exists but this custom server has never
-                // registered it (e.g. an invite-gated server). Offer
-                // the retry with an invite instead of a dead end.
-                // The default server never asks the client for an
-                // invite (decision D2), so this stays custom-only.
-                HStack(spacing: 8) {
-                    TextField("Invite code", text: $inviteCode)
-                        .textFieldStyle(.roundedBorder).frame(maxWidth: 240)
-                    Button("Register with server") {
-                        Task { await mesh.createIdentity(name: mesh.deviceName, invite: inviteCode) }
-                    }
-                    .buttonStyle(.bordered).disabled(mesh.isBusy)
-                }
-            }
-            if case let .offline(message) = mesh.phase {
+            serverGuidanceView
+            if case let .offline(message) = mesh.phase, serverGuidance.kind == .none {
+                // Offline states with no server-specific guidance
+                // keep the existing behavior (§3.6): the plain
+                // message and one retry.
                 Label(message, systemImage: "exclamationmark.circle.fill")
                     .font(.callout).foregroundStyle(AppColor.statusError)
                     .fixedSize(horizontal: false, vertical: true)
                 Button("Try again") { Task { await mesh.refresh() } }
-                    .buttonStyle(.bordered).controlSize(.small)
+                    .buttonStyle(.bordered).controlSize(AppButtonStyle.rowControlSize)
                     .disabled(mesh.isBusy)
             }
         }
@@ -178,6 +175,60 @@ struct MeshModeView: View {
         .padding(16)
         .background(cardBackground, in: RoundedRectangle(cornerRadius: Radius.card))
         .overlay(RoundedRectangle(cornerRadius: Radius.card).strokeBorder(AppColor.hairline))
+    }
+
+    private var serverGuidance: MeshServerGuidance {
+        .presentation(isCustom: mesh.isUsingCustomServer,
+                      availability: mesh.serverAvailability,
+                      phase: mesh.phase)
+    }
+
+    /// The §3.3 server-state surface under the status line: one
+    /// quiet explanation and only the actions that state calls
+    /// for. No dialogs, no red — a failed server is a state to
+    /// describe and a way forward, not an error to announce.
+    @ViewBuilder
+    private var serverGuidanceView: some View {
+        let guidance = serverGuidance
+        if guidance.kind != .none {
+            VStack(alignment: .leading, spacing: Space.small) {
+                if let explanationKey = guidance.explanationKey {
+                    Text(LocalizedStringKey(explanationKey))
+                        .font(.callout).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if guidance.showsUseDefaultServer {
+                    Text("Switching servers changes which pairings you see. Pairings on the other server are kept and come back when you switch back.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                HStack(spacing: Space.small) {
+                    if guidance.showsOpenServerSettings {
+                        Button("Open personal server settings") { openServerSettings() }
+                            .buttonStyle(.bordered)
+                            .controlSize(AppButtonStyle.rowControlSize)
+                    }
+                    if guidance.showsRetry {
+                        Button("Try again") { Task { await mesh.refresh() } }
+                            .buttonStyle(.bordered)
+                            .controlSize(AppButtonStyle.rowControlSize)
+                            .disabled(mesh.isBusy)
+                    }
+                    if guidance.showsUseDefaultServer {
+                        Button("Use default server") { Task { await mesh.switchToDefaultServer() } }
+                            .buttonStyle(.bordered)
+                            .controlSize(AppButtonStyle.rowControlSize)
+                            .disabled(mesh.isBusy)
+                    }
+                    if guidance.showsEnterInviteCode {
+                        Button("Enter invite code") { inviteSheet.present() }
+                            .buttonStyle(.bordered)
+                            .controlSize(AppButtonStyle.rowControlSize)
+                            .disabled(mesh.isBusy)
+                    }
+                }
+            }
+        }
     }
 
     /// Presence (dot + word) and the server pill (§3.2, D4): the
@@ -194,16 +245,27 @@ struct MeshModeView: View {
                 Text(LocalizedStringKey(mesh.isOnline ? "Online" : "Offline"))
                     .font(.callout.weight(.medium))
             }
-            ServerStatusPillView(presentation: ServerStatusPillView.presentation(for: mesh)) {
-                openServerSettings()
-            }
+            ServerStatusPillView(presentation: ServerStatusPillView.presentation(for: mesh),
+                                 action: serverPillAction)
         }
     }
 
+    /// The card's pill opens Settings → Self-hosted — except in
+    /// the not-available state, whose dedicated "Open personal
+    /// server settings" action is already on this card: the same
+    /// action never appears twice on one surface (§1.8), so there
+    /// the pill renders inert and the one button carries it.
+    private var serverPillAction: (() -> Void)? {
+        serverGuidance.kind == .defaultNotAvailable
+            ? nil
+            : { self.openServerSettings() }
+    }
+
     /// Opens the app's Settings scene (macOS 13 path, mirroring the
-    /// gear button in the main window): the personal-server frame
-    /// lives in Settings → Self-hosted.
+    /// gear button in the main window), landing on the Self-hosted
+    /// pane: the personal-server frame lives there (§3.4).
     private func openServerSettings() {
+        SettingsSection.selfHosted.save()
         NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
     }
 
@@ -216,14 +278,16 @@ struct MeshModeView: View {
                 TextField("123 456 789", text: $connectID)
                     .font(.system(size: 15, design: .monospaced))
                     .textFieldStyle(.roundedBorder).frame(maxWidth: 280)
+                    .focused($connectFieldFocused)
                     .onSubmit { Task { await mesh.connect(toRawID: connectID) } }
                 Button("Connect") { Task { await mesh.connect(toRawID: connectID) } }
                     .buttonStyle(.borderedProminent)
                     .disabled(mesh.isBusy || mesh.phase != .ready
                               || connectID.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            Text("Connecting sends a pairing request. Once the other device approves, it appears under Paired devices.")
+            Text(LocalizedStringKey(serverGuidance.connectCaptionKey))
                 .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             if let status = mesh.statusMessage {
                 Text(status).font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -275,8 +339,7 @@ struct MeshModeView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Paired devices").font(.headline)
             if mesh.pairedDevices.isEmpty {
-                Text("No paired devices yet.")
-                    .font(.callout).foregroundStyle(.secondary)
+                PairedDevicesEmptyView { connectFieldFocused = true }
             } else {
                 VStack(spacing: 0) {
                     ForEach(mesh.pairedDevices) { device in
